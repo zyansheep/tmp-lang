@@ -1,12 +1,8 @@
+use bevy::prelude::*;
 
 #[derive(Component)]
 enum Expr {
-	Abstraction {
-		expr: Entity,
-	}
-	Application {
-		func: Entity,
-		args: Entity,
-	}
+	Abstraction { expr: Entity },
+	Application { func: Entity, args: Entity },
 	Variable,
 }
