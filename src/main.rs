@@ -25,14 +25,14 @@ fn main() {
 
 fn setup(mut commands: Commands) {
 	commands.spawn_bundle(OrthographicCameraBundle::new_2d()).insert(PanCam::default());
-	commands.spawn_bundle(SpriteBundle {
+	/* commands.spawn_bundle(SpriteBundle {
 		sprite: Sprite {
 			color: Color::rgb(0.25, 0.25, 0.75),
 			custom_size: Some(Vec2::new(50.0, 50.0)),
 			..default()
 		},
 		..default()
-	}).insert(Expr::Variable);
+	}).insert(Expr::Variable); */
 }
 
 fn keyboard_input_system(mut commands: Commands, mouse: Res<MousePosWorld>, keyboard_input: Res<Input<KeyCode>>) {
@@ -53,7 +53,7 @@ fn keyboard_input_system(mut commands: Commands, mouse: Res<MousePosWorld>, keyb
 		commands.spawn_bundle(SpriteBundle {
 			transform: Transform::from_xyz(mouse.x, mouse.y, 0.0),
 			sprite: Sprite {
-				color: Color::rgb(0.25, 0.25, 0.75),
+				color: Color::rgb(0.75, 0.25, 0.25),
 				custom_size: Some(Vec2::new(50.0, 20.0)),
 				..default()
 			},
