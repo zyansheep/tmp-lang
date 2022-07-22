@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use bevy_pancam::{PanCam, PanCamPlugin};
 
 use objects::Expr;
 
@@ -11,13 +12,14 @@ fn main() {
 	println!("Hello, langjam #0003!");
 	App::new()
         .add_plugins(DefaultPlugins)
+        .add_plugin(PanCamPlugin::default())
         .add_startup_system(setup)
         .run();
 }
 
 
 fn setup(mut commands: Commands) {
-    commands.spawn_bundle(OrthographicCameraBundle::new_2d());
+    commands.spawn_bundle(OrthographicCameraBundle::new_2d()).insert(PanCam::default());
     commands.spawn_bundle(SpriteBundle {
         sprite: Sprite {
             color: Color::rgb(0.25, 0.25, 0.75),
