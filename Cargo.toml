@@ -21,6 +21,10 @@ chumsky = "0.8.0"
 ariadne = "0.1.5"
 # Bevy
 bevy = "0.7.0"
+anyhow = "1.0.58"
+bytecheck = "0.6.8"
+rkyv = { version = "0.7.39", features = ["validation"] }
+thiserror = "1.0.31"
 
 
 
@@ -38,6 +42,8 @@ nativeBuildInputs = [
 ]
 buildInputs = [
 	# Window and Input
+	"libxkbcommon",
+	"xorg.libX11",
 	"xorg.libXcursor",
 	"xorg.libXrandr",
 	"xorg.libXi",
@@ -48,7 +54,6 @@ buildInputs = [
 	"vulkan-loader",
 	"vulkan-validation-layers",
 	"alsaLib", # Sound support
-	"udev", # device management
 	# lld # fast linker
 ]
 runtimeLibs = []

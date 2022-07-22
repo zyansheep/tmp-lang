@@ -4,6 +4,8 @@ use objects::Expr;
 
 mod objects;
 mod parse;
+mod name;
+mod expr;
 
 fn main() {
 	println!("Hello, langjam #0003!");
