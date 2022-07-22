@@ -13,7 +13,6 @@ opt-level = 1
 [profile.dev.package."*"]
 opt-level = 3
 
-
 [dependencies]
 # Parser stuff
 hashdb = { git = "https://github.com/libdither/disp" }
@@ -36,6 +35,7 @@ app = true
 cCompiler = "gcc12"
 nativeBuildInputs = [
 	"cargo-edit",
+	"cargo-watch",
 	"pkgconfig",
 	"cmake",
 	"mold",
