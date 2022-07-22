@@ -27,9 +27,25 @@ app = true
 cCompiler = "gcc12"
 nativeBuildInputs = [
 	"cargo-edit",
+	"pkgconfig",
+	"cmake",
 	"mold",
 ]
-buildInputs = []
+buildInputs = [
+	# Window and Input
+	"xorg.libXcursor",
+	"xorg.libXrandr",
+	"xorg.libXi",
+
+	# Vulkan
+	"vulkan-tools",
+	"vulkan-headers",
+	"vulkan-loader",
+	"vulkan-validation-layers",
+	"alsaLib", # Sound support
+	"udev", # device management
+	# lld # fast linker
+]
 runtimeLibs = []
 toolchain = "nightly"
 devshell = {name = "rust-shell" }
