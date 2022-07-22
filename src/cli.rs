@@ -2,7 +2,7 @@ use crate::{name::NamespaceMut, parse::parse};
 use hashdb::LinkArena;
 
 pub fn print_usage() {
-	println!("asdsassadasd")
+	println!("USAGE: tmp-lang <filename>")
 }
 
 pub fn read_from_file(filename: &str) -> Result<String, String> {
