@@ -26,8 +26,7 @@ bytecheck = "0.6.8"
 rkyv = { version = "0.7.39", features = ["validation"] }
 thiserror = "1.0.31"
 bevy_pancam = "0.3.0"
-
-
+bevy_mouse_tracking_plugin = "0.2.1"
 
 # Stuff for Zyansheep, I use NixOS btw :)
 [package.metadata.nix]

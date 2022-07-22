@@ -526,6 +526,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "bevy_mouse_tracking_plugin"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "511386ca7bd8da9b55975cbb1974533813613fefd8797b3b7a3c77618ff937d7"
+dependencies = [
+ "bevy",
+]
+
+[[package]]
 name = "bevy_pancam"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3309,6 +3318,7 @@ dependencies = [
  "anyhow",
  "ariadne",
  "bevy",
+ "bevy_mouse_tracking_plugin",
  "bevy_pancam",
  "bytecheck",
  "chumsky",
