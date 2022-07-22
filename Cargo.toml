@@ -1,0 +1,25 @@
+[package]
+name = "tmp-lang"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+
+
+
+# Stuff for Zyansheep, I use NixOS btw :)
+[package.metadata.nix]
+build = true
+app = true
+[workspace.metadata.nix]
+cCompiler = "gcc12"
+nativeBuildInputs = [
+	"cargo-edit",
+	"mold",
+]
+buildInputs = []
+runtimeLibs = []
+toolchain = "nightly"
+devshell = {name = "rust-shell" }
