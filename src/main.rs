@@ -6,7 +6,6 @@ use objects::Expr;
 
 use crate::objects::Binding;
 
-mod cli;
 mod expr;
 mod name;
 mod objects;
