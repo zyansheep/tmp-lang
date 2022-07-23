@@ -28,9 +28,9 @@ fn main() {
 		.add_plugin(MousePosPlugin::SingleCamera)
 		.add_startup_system(setup)
 		.add_state(AppState::Default)
-		.add_system_set(SystemSet::on_update(AppState::Default).with_system(mouseover_system))
+		.add_system_set(SystemSet::on_update(AppState::Default).with_system(mouseover_system).with_system(keyboard_input_system))
 		.add_system_set(SystemSet::on_update(AppState::PlacingObject).with_system(placing_system))
-		.add_system(keyboard_input_system)
+		// .add_system(keyboard_input_system)
 		.add_system(object_system)
 		.init_resource::<GameState>()
 		.run();
@@ -118,6 +118,7 @@ impl ObjectData {
 		}
 	}
 
+	// Gen rectangles of A4-paper size
 	fn size(&self) -> Vec2 {
 		match self.orientation {
 			Orientation::Horizontal => Vec2::new(self.size, self.size * FRAC_1_SQRT_2),
@@ -142,42 +143,20 @@ fn keyboard_input_system(
 	mut app_state: ResMut<State<AppState>>,
 	keyboard_input: Res<Input<KeyCode>>,
 ) {
-	match app_state.current() {
-		AppState::Default => {
-			if keyboard_input.just_pressed(KeyCode::F) {
-				info!("Placing Function Block");
-				commands.spawn_bundle(Object {
-					expr: Expr::Function {
-						bind: Binding::None,
-						expr: None,
-					},
-					data: ObjectData {
-						orientation: Orientation::Horizontal,
-						location: Vec2::new(0.0, 0.0),
-						size: 32.0,
-					},
-					..default()
-				});
-				app_state.set(AppState::PlacingObject).unwrap();
-			} else if keyboard_input.just_pressed(KeyCode::V) {
-				info!("Placing Variable Block");
-				commands.spawn_bundle(Object {
-					expr: Expr::Variable,
-					data: ObjectData {
-						orientation: Orientation::Horizontal,
-						location: Vec2::new(0.0, 0.0),
-						size: 32.0,
-					},
-					..default()
-				});
-				app_state.set(AppState::PlacingObject).unwrap();
-			}
-		}
-		AppState::PlacingObject => {
-			if keyboard_input.just_pressed(KeyCode::R) {
-				state.placing_orientation.swap()
-			}
-		}
+	if keyboard_input.just_pressed(KeyCode::F) {
+		info!("Placing Function Block");
+		commands.spawn_bundle(Object {
+			expr: Expr::Function {
+				bind: Binding::None,
+				expr: None,
+			},
+			..default()
+		});
+		app_state.set(AppState::PlacingObject).unwrap();
+	} else if keyboard_input.just_pressed(KeyCode::V) {
+		info!("Placing Variable Block");
+		commands.spawn_bundle(Object::default());
+		app_state.set(AppState::PlacingObject).unwrap();
 	}
 }
 
@@ -185,42 +164,64 @@ fn object_system(
 	mut commands: Commands,
 	state: ResMut<GameState>,
 	app_state: ResMut<State<AppState>>,
-	mut objects: Query<(Entity, &ObjectData, &Expr, Option<&Sprite>)>,
+	mut objects: Query<(Entity, &ObjectData, &Expr, &Sprite)>,
 ) {
-	for (entity, data, expr, sprite) in objects.iter_mut() {
+	/* for (entity, data, expr, sprite) in objects.iter_mut() {
 		if sprite.is_some() {
 			commands.entity(entity).remove_bundle::<SpriteBundle>();
 		}
 
-		// let data = if let AppState::PlacingObject = app_state.current() {
-		// 	let mut data = (*data).clone();
-		// 	data.orientation = state.placing_orientation;
-		// 	data
-		// } else {
-		// 	(*data).clone()
-		// };
+		/* let data = if let AppState::PlacingObject = app_state.current() {
+			let mut data = (*data).clone();
+			data.orientation = state.placing_orientation;
+			data
+		} else {
+			(*data).clone()
+		}; */
 
 		commands.entity(entity).insert_bundle(SpriteBundle {
 			sprite: data.gen_sprite(expr),
 			transform: Transform::from_xyz(data.location.x, data.location.y, 0.0),
 			..default()
 		});
-	}
+	} */
 }
 
 fn placing_system(
 	mut commands: Commands,
 	mouse: Res<Input<MouseButton>>,
 	mouse_pos: Res<MousePosWorld>,
-	state: ResMut<GameState>,
+	mut state: ResMut<GameState>,
 	mut app_state: ResMut<State<AppState>>,
-	mut placing: Query<(Entity, &mut ObjectData), With<Placing>>,
+	mut placing: Query<(Entity, &mut ObjectData, &Expr, Option<&mut Sprite>, Option<&mut Transform>), With<Placing>>,
 	other_objects: Query<(Entity, &ObjectData), Without<Placing>>,
+	keyboard_input: Res<Input<KeyCode>>,
+	camera_proj: Query<&OrthographicProjection, With<Camera>>,
 ) {
-	let (entity, mut data) = placing.iter_mut().next().unwrap();
+	let (entity, mut data, expr, sprite, transform) = placing.iter_mut().next().unwrap();
 	data.location = Vec2::new(mouse_pos.x, mouse_pos.y);
 	data.orientation = state.placing_orientation;
-
+	data.size = camera_proj.iter().next().unwrap().scale * 128.0;
+	// If sprite exists, update it, otherwise create new sprite
+	if let (Some(mut sprite), Some(mut transform)) = (sprite, transform) {
+		*sprite = data.gen_sprite(expr);
+		transform.translation = Vec3::new(data.location.x, data.location.y, 0.0);
+	} else {
+		commands.entity(entity).insert_bundle(SpriteBundle {
+			sprite: data.gen_sprite(expr),
+			transform: Transform::from_xyz(data.location.x, data.location.y, 0.0),
+			..default()
+		});
+	}
+	
+	// Press R to rotate while placing
+	if keyboard_input.just_pressed(KeyCode::R) {
+		state.placing_orientation.swap();
+	} else if keyboard_input.just_pressed(KeyCode::Escape) {
+		commands.entity(entity).despawn();
+		app_state.set(AppState::Default).unwrap();
+	}
+	// Place block on Left Click
 	if mouse.just_pressed(MouseButton::Left) {
 		let width = data.size()[0];
 		let height = data.size()[1];
