@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use bevy_mod_picking::{DebugEventsPickingPlugin, DefaultPickingPlugins, PickableBundle, PickingCameraBundle, PickingEvent};
+// use bevy_mod_picking::{DebugEventsPickingPlugin, DefaultPickingPlugins, PickableBundle, PickingCameraBundle, PickingEvent};
 use bevy_mouse_tracking_plugin::{MousePosPlugin, MousePosWorld};
 use bevy_pancam::{PanCam, PanCamPlugin};
 
@@ -21,36 +21,52 @@ fn main() {
 		.add_plugins(DefaultPlugins)
 		.add_plugin(PanCamPlugin::default())
 		.add_plugin(MousePosPlugin::SingleCamera)
-		.add_plugins(DefaultPickingPlugins) // <- Adds Picking, Interaction, and Highlighting plugins.
-        .add_plugin(DebugEventsPickingPlugin)
+		// .add_plugins(DefaultPickingPlugins) // <- Adds Picking, Interaction, and Highlighting plugins.
+        // .add_plugin(DebugEventsPickingPlugin)
 		.add_startup_system(setup)
 		.add_system(keyboard_input_system)
     	.add_system(mouseover_system)
+		.init_resource::<GameState>()
 		.run();
 }
 
 fn setup(mut commands: Commands) {
 	commands
 		.spawn_bundle(OrthographicCameraBundle::new_2d())
-		.insert(PanCam::default())
-    	.insert_bundle(PickingCameraBundle::default());
+		.insert(PanCam::default());
+}
+
+#[derive(Default)]
+struct GameState {
+	current_hovered: Option<Entity>,
 }
 
 fn mouseover_system(
 	mouse: Res<MousePosWorld>,
-	objects: Query<(&Sprite, &Transform), With<Hoverable>>,
+	mut state: ResMut<GameState>,
+	objects: Query<(Entity, &Sprite, &Transform), With<Hoverable>>,
 ) {
-	for object in objects.iter() {
-
-	}
-	for (sprite, transform) in objects.iter() {
-		if sprite
-        /* match event {
-            PickingEvent::Selection(e) => info!("A selection event happened: {:?}", e),
-            PickingEvent::Hover(e) => info!("Egads! A hover event!? {:?}", e),
-            PickingEvent::Clicked(e) => info!("Gee Willikers, it's a click! {:?}", e),
-        } */
+	let old_state = state.current_hovered;
+	let mut found_hover = false;
+	for (entity, sprite, transform) in objects.iter() {
+		if let Some(size) = sprite.custom_size {
+			let hw = size.x / 2.0;
+			let hh = size.y / 2.0;
+			if mouse.x > transform.translation.x - hw &&
+				mouse.y > transform.translation.y - hh &&
+				mouse.x < transform.translation.x + hw &&
+				mouse.y < transform.translation.y + hh
+			{
+				state.current_hovered = Some(entity);
+				found_hover = true;
+			}
+		}
     }
+	if !found_hover { state.current_hovered = None }
+
+	if state.current_hovered != old_state {
+		info!("Hovering: {:?}", state.current_hovered);
+	}
 }
 
 fn keyboard_input_system(
