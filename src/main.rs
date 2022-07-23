@@ -1,4 +1,4 @@
-use std::f32::consts::{FRAC_1_SQRT_2};
+use std::f32::consts::FRAC_1_SQRT_2;
 
 use bevy::prelude::*;
 // use bevy_mod_picking::{DebugEventsPickingPlugin, DefaultPickingPlugins, PickableBundle, PickingCameraBundle, PickingEvent};
@@ -8,16 +8,16 @@ use mouseover::{Hovering, Side};
 use objects::{Object, ObjectData, Orientation};
 
 mod expr;
-mod name;
-mod parse;
-mod objects;
-mod ui;
 mod mouseover;
+mod name;
+mod objects;
+mod parse;
+mod ui;
 
-use crate::{objects::{Binding, Expr}};
+use crate::objects::{Binding, Expr};
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash)]
-enum AppState {
+pub enum AppState {
 	Default,
 	PlacingObject,
 }
@@ -29,7 +29,7 @@ fn main() {
 		.add_plugin(PanCamPlugin::default())
 		.add_plugin(MousePosPlugin::SingleCamera)
 		.add_startup_system(setup)
-   		.add_startup_system(ui::ui_setup)
+		.add_startup_system(ui::ui_setup)
 		.add_state(AppState::Default)
 		.add_system_set(SystemSet::on_update(AppState::Default).with_system(keyboard_input_system))
 		.add_system_set(SystemSet::on_update(AppState::PlacingObject).with_system(placing_system))
@@ -51,18 +51,24 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
 }
 
 #[derive(Default)]
-struct GameState {
+pub struct GameState {
 	placing_orientation: Orientation,
 	placing_index: f32,
 	hovering: Option<Entity>,
 }
 
-
 #[derive(Component, Default, Clone)]
 pub struct Placing;
 
-fn place_expr(mut commands: Commands, app_state: &mut State<AppState>, state: &mut GameState, expr: Expr) {
-	commands.spawn_bundle(Object { expr, ..default() }).insert(Placing);
+fn place_expr(
+	mut commands: Commands,
+	app_state: &mut State<AppState>,
+	state: &mut GameState,
+	expr: Expr,
+) {
+	commands
+		.spawn_bundle(Object { expr, ..default() })
+		.insert(Placing);
 	app_state.set(AppState::PlacingObject).unwrap();
 	state.placing_index += 1.0;
 }
@@ -74,14 +80,27 @@ fn keyboard_input_system(
 	keyboard_input: Res<Input<KeyCode>>,
 ) {
 	if keyboard_input.just_pressed(KeyCode::F) {
-		place_expr(commands, &mut app_state, &mut state, Expr::Function {
-			bind: Binding::None,
-			expr: None,
-		});
+		place_expr(
+			commands,
+			&mut app_state,
+			&mut state,
+			Expr::Function {
+				bind: Binding::None,
+				expr: None,
+			},
+		);
 	} else if keyboard_input.just_pressed(KeyCode::V) {
 		place_expr(commands, &mut app_state, &mut state, Expr::Variable);
 	} else if keyboard_input.just_pressed(KeyCode::A) {
-		place_expr(commands, &mut app_state, &mut state, Expr::Application { func: None, args: None });
+		place_expr(
+			commands,
+			&mut app_state,
+			&mut state,
+			Expr::Application {
+				func: None,
+				args: None,
+			},
+		);
 	} else if keyboard_input.just_pressed(KeyCode::D) {
 		info!("Deleting Block");
 		if let Some(entity) = state.hovering {
@@ -124,8 +143,20 @@ fn placing_system(
 	mouse_pos: Res<MousePosWorld>,
 	mut state: ResMut<GameState>,
 	mut app_state: ResMut<State<AppState>>,
-	mut placing: Query<(Entity, &mut ObjectData, &Expr, Option<&mut Sprite>, Option<&mut Transform>), With<Placing>>,
-	mut other_objects: Query<(Entity, &mut ObjectData, &mut Expr, Option<&Hovering>), Without<Placing>>,
+	mut placing: Query<
+		(
+			Entity,
+			&mut ObjectData,
+			&Expr,
+			Option<&mut Sprite>,
+			Option<&mut Transform>,
+		),
+		With<Placing>,
+	>,
+	mut other_objects: Query<
+		(Entity, &mut ObjectData, &mut Expr, Option<&Hovering>),
+		Without<Placing>,
+	>,
 	keyboard_input: Res<Input<KeyCode>>,
 	camera_proj: Query<&OrthographicProjection, With<Camera>>,
 	asset_server: Res<AssetServer>,
@@ -149,8 +180,12 @@ fn placing_system(
 		if let Some(hovering) = h_hovering {
 			if let Some((side, expr_slot)) = match (&mut *h_expr, hovering.side) {
 				(Expr::Function { bind: _, expr }, side) if expr.is_none() => Some((side, expr)),
-				(Expr::Application { func, args: _ }, Side::First) if func.is_none() => Some((Side::First, func)),
-				(Expr::Application { func: _, args }, Side::Second) if args.is_none() => Some((Side::Second, args)),
+				(Expr::Application { func, args: _ }, Side::First) if func.is_none() => {
+					Some((Side::First, func))
+				}
+				(Expr::Application { func: _, args }, Side::Second) if args.is_none() => {
+					Some((Side::Second, args))
+				}
 				(_, _) => None,
 			} {
 				// Check which side of top hovered block we need to place the block we are currently placing.
@@ -207,6 +242,4 @@ fn placing_system(
 		commands.entity(entity).despawn();
 		app_state.set(AppState::Default).unwrap();
 	}
-
-	
 }
