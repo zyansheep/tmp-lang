@@ -1,4 +1,4 @@
-use std::f32::consts::FRAC_1_SQRT_2;
+use std::f32::consts::{FRAC_1_SQRT_2, FRAC_PI_2};
 
 use bevy::prelude::*;
 // use bevy_mod_picking::{DebugEventsPickingPlugin, DefaultPickingPlugins, PickableBundle, PickingCameraBundle, PickingEvent};
@@ -11,7 +11,7 @@ mod parse;
 mod objects;
 mod ui;
 
-use crate::{objects::{Binding, Expr}, ui::ui_setup};
+use crate::{objects::{Binding, Expr}};
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash)]
 enum AppState {
@@ -26,14 +26,14 @@ fn main() {
 		.add_plugin(PanCamPlugin::default())
 		.add_plugin(MousePosPlugin::SingleCamera)
 		.add_startup_system(setup)
-   		.add_startup_system(ui_setup)
+   		.add_startup_system(ui::ui_setup)
 		.add_state(AppState::Default)
 		.add_system_set(SystemSet::on_update(AppState::Default).with_system(keyboard_input_system))
 		.add_system_set(SystemSet::on_update(AppState::PlacingObject).with_system(placing_system))
 		// .add_system(keyboard_input_system)
 		.add_system(object_system)
 		.add_system(mouseover_system.before(object_system))
-		.add_system(crate::ui::button_system)
+		.add_system(ui::button_system)
 		.init_resource::<GameState>()
 		.run();
 }
@@ -43,6 +43,8 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
 		.spawn_bundle(OrthographicCameraBundle::new_2d())
 		.insert(MainCamera)
 		.insert(PanCam::default());
+
+	asset_server.load_folder("assets");
 }
 
 #[derive(Default)]
@@ -146,13 +148,28 @@ impl ObjectData {
 			..default()
 		}
 	}
+	fn gen_texture(&self, expr: &Expr, asset_server: &AssetServer) -> Handle<Image> {
+		match expr {
+			Expr::Variable => asset_server.load("VariableDot.png"),
+			Expr::Function { bind: Binding::None, expr: None } => asset_server.load("Lambda.png"),
+			Expr::Function { .. } => asset_server.load("LambdaDot.png"),
+			Expr::Application { .. } => asset_server.load("Application.png"),
+		}
+	}
+	fn gen_transform(&self, z_loc: f32) -> Transform {
+		Transform {
+			translation: Vec3::new(self.location.x, self.location.y, z_loc),
+			rotation: match self.orientation {
+				Orientation::Horizontal => Quat::IDENTITY,
+				Orientation::Vertical => Quat::from_rotation_z(FRAC_PI_2),
+			},
+			scale: Vec3::ONE,
+		}
+	}
 
 	// Gen rectangles of A4-paper size
 	fn size(&self) -> Vec2 {
-		match self.orientation {
-			Orientation::Horizontal => Vec2::new(self.size, self.size * FRAC_1_SQRT_2),
-			Orientation::Vertical => Vec2::new(self.size * FRAC_1_SQRT_2, self.size),
-		}
+		Vec2::new(self.size, self.size * FRAC_1_SQRT_2)
 	}
 }
 
@@ -292,8 +309,8 @@ fn placing_system(
 	} else {
 		commands.entity(entity).insert_bundle(SpriteBundle {
 			sprite: data.gen_sprite(expr),
-			transform: Transform::from_xyz(data.location.x, data.location.y, state.placing_index),
-			texture: asset_server.load("block.png"),
+			transform: data.gen_transform(state.placing_index),
+			texture: data.gen_texture(expr, &*asset_server),
 			..default()
 		});
 	}
