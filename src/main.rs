@@ -1,4 +1,7 @@
+use std::f32::consts::FRAC_1_SQRT_2;
+
 use bevy::prelude::*;
+use iyes_loopless::prelude::*;
 // use bevy_mod_picking::{DebugEventsPickingPlugin, DefaultPickingPlugins, PickableBundle, PickingCameraBundle, PickingEvent};
 use bevy_mouse_tracking_plugin::{MousePosPlugin, MousePosWorld};
 use bevy_pancam::{PanCam, PanCamPlugin};
@@ -12,8 +15,11 @@ mod name;
 mod objects;
 mod parse;
 
-#[derive(Component)]
-struct Hoverable;
+#[derive(Clone, PartialEq, Eq, Debug, Hash)]
+enum AppState {
+	Default,
+	PlacingObject,
+}
 
 fn main() {
 	println!("Hello, langjam #0003!");
@@ -21,11 +27,22 @@ fn main() {
 		.add_plugins(DefaultPlugins)
 		.add_plugin(PanCamPlugin::default())
 		.add_plugin(MousePosPlugin::SingleCamera)
-		// .add_plugins(DefaultPickingPlugins) // <- Adds Picking, Interaction, and Highlighting plugins.
-        // .add_plugin(DebugEventsPickingPlugin)
 		.add_startup_system(setup)
-		.add_system(keyboard_input_system)
-    	.add_system(mouseover_system)
+    	.add_state(AppState::Default)
+		.add_system_set(
+			ConditionSet::new()
+				.run_in_state(AppState::Default)
+				.with_system(keyboard_input_system)
+				.with_system(mouseover_system)
+				.into()
+		)
+		.add_system_set(
+			ConditionSet::new()
+				.run_in_state(AppState::PlacingObject)
+				.with_system(placing_system)
+				.into()
+		)
+    	.add_system(object_system)
 		.init_resource::<GameState>()
 		.run();
 }
@@ -38,15 +55,17 @@ fn setup(mut commands: Commands) {
 
 #[derive(Default)]
 struct GameState {
-	current_hovered: Option<Entity>,
+	hovering: Option<Entity>,
+	placing_orientation: Orientation,
+	placing_size: f32,
 }
 
 fn mouseover_system(
 	mouse: Res<MousePosWorld>,
 	mut state: ResMut<GameState>,
-	objects: Query<(Entity, &Sprite, &Transform), With<Hoverable>>,
+	objects: Query<(Entity, &Sprite, &Transform), With<ObjectData>>,
 ) {
-	let old_state = state.current_hovered;
+	let old_state = state.hovering;
 	let mut found_hover = false;
 	for (entity, sprite, transform) in objects.iter() {
 		if let Some(size) = sprite.custom_size {
@@ -57,53 +76,113 @@ fn mouseover_system(
 				mouse.x < transform.translation.x + hw &&
 				mouse.y < transform.translation.y + hh
 			{
-				state.current_hovered = Some(entity);
+				state.hovering = Some(entity);
 				found_hover = true;
 			}
 		}
     }
-	if !found_hover { state.current_hovered = None }
+	if !found_hover { state.hovering = None }
 
-	if state.current_hovered != old_state {
-		info!("Hovering: {:?}", state.current_hovered);
+	if state.hovering != old_state {
+		info!("Hovering: {:?}", state.hovering);
 	}
 }
 
+#[derive(Default, Clone, Copy)]
+enum Orientation { Vertical, #[default] Horizontal }
+impl Orientation { fn swap(&mut self) { *self = match *self { Self::Horizontal => Self::Vertical, Self::Vertical => Self::Horizontal } } }
+
+#[derive(Component, Default)]
+struct ObjectData {
+	orientation: Orientation,
+	location: Vec2,
+	size: f32, // Size of longer side
+}
+impl ObjectData {
+	fn gen_sprite(&self, expr: &Expr) -> Sprite {
+		Sprite {
+			custom_size: Some(match self.orientation {
+				Orientation::Horizontal => Vec2::new(self.size, self.size * FRAC_1_SQRT_2),
+				Orientation::Vertical => Vec2::new(self.size * FRAC_1_SQRT_2, self.size),
+			}),
+			color: match expr {
+				Expr::Function { .. } => Color::BLUE,
+				Expr::Application { .. } => Color::GRAY,
+				Expr::Variable => Color::RED
+			},
+    		..default()
+		}
+	}
+}
+
+#[derive(Bundle, Default)]
+struct Object {
+	data: ObjectData,
+	expr: Expr,
+	placing: Placing,
+}
+#[derive(Component, Default, Clone)]
+struct Placing;
+
 fn keyboard_input_system(
 	mut commands: Commands,
-	mouse: Res<MousePosWorld>,
+	mut state: ResMut<GameState>,
+	mut app_state: ResMut<State<AppState>>,
 	keyboard_input: Res<Input<KeyCode>>,
 ) {
-	if keyboard_input.just_pressed(KeyCode::A) {
-		info!("'A' just pressed");
-		commands
-			.spawn_bundle(SpriteBundle {
-				transform: Transform::from_xyz(mouse.x, mouse.y, 0.0),
-				sprite: Sprite {
-					color: Color::rgb(0.25, 0.25, 0.75),
-					custom_size: Some(Vec2::new(50.0, 20.0)),
-					..default()
-				},
-				..default()
-			})
-			.insert(Expr::Abstraction {
-				bind: Binding::None,
-				expr: None,
-			}).insert(Hoverable);
+	match app_state.current() {
+		AppState::Default => {
+			if keyboard_input.just_pressed(KeyCode::F) {
+				info!("Placing Function Block");
+				commands.spawn_bundle(Object {
+					expr: Expr::Function {
+						bind: Binding::None,
+						expr: None,
+					}, ..default()
+				});
+				app_state.set(AppState::PlacingObject);
+			} else if keyboard_input.just_pressed(KeyCode::V) {
+				info!("Placing Variable Block");
+				commands.spawn_bundle(Object::default());
+				app_state.set(AppState::PlacingObject);
+			}
+		}
+		AppState::PlacingObject => {
+			if keyboard_input.just_pressed(KeyCode::R) {
+				state.placing_orientation.swap()
+			}
+		}
 	}
-	if keyboard_input.just_pressed(KeyCode::V) {
-		info!("'V' just pressed");
-		commands
-			.spawn_bundle(SpriteBundle {
-				transform: Transform::from_xyz(mouse.x, mouse.y, 0.0),
-				sprite: Sprite {
-					color: Color::rgb(0.75, 0.25, 0.25),
-					custom_size: Some(Vec2::new(50.0, 20.0)),
-					..default()
-				},
+}
+
+fn object_system(
+	mut commands: Commands,
+	mut state: ResMut<GameState>,
+	objects: Query<(Entity, &ObjectData, &Expr, Option<&Sprite>), Without<Placing>>,
+) {
+	for (entity, data, expr, sprite) in objects.iter() {
+		let sprite = sprite.get_or_insert()
+		if sprite.is_none() {
+			commands.entity(entity).insert_bundle(SpriteBundle {
+				sprite: data.gen_sprite(expr),
+				transform: Transform::from_xyz(data.location.x, data.location.y, 0.0),
 				..default()
 			})
-			.insert(Expr::Variable)
-			.insert(Hoverable);
+		}
+	}
+}
+
+fn placing_system(
+	mut commands: Commands,
+	mut app_state: ResMut<State<AppState>>,
+	mouse: Res<Input<MouseButton>>,
+	mouse_pos: Res<MousePosWorld>,
+	placing: Query<(Entity, &mut ObjectData), With<Placing>>
+) {
+	let (entity, mut data) = placing.iter_mut().next().unwrap();
+	data.location = Vec2::new(mouse_pos.x, mouse_pos.y);
+
+	if mouse.just_pressed(MouseButton::Left) {
+		commands.entity(entity).remove::<Placing>();
 	}
 }

@@ -6,9 +6,10 @@ pub enum Binding {
 	Branch(Box<Binding>, Box<Binding>)
 }
 
-#[derive(Component)]
+#[derive(Component, Default)]
 pub enum Expr {
-	Abstraction { bind: Binding, expr: Option<Entity> },
+	Function { bind: Binding, expr: Option<Entity> },
 	Application { func: Entity, args: Option<Entity> },
+	#[default]
 	Variable,
 }
