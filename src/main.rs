@@ -1,7 +1,6 @@
 use std::f32::consts::FRAC_1_SQRT_2;
 
 use bevy::prelude::*;
-use iyes_loopless::prelude::*;
 // use bevy_mod_picking::{DebugEventsPickingPlugin, DefaultPickingPlugins, PickableBundle, PickingCameraBundle, PickingEvent};
 use bevy_mouse_tracking_plugin::{MousePosPlugin, MousePosWorld};
 use bevy_pancam::{PanCam, PanCamPlugin};
@@ -28,21 +27,11 @@ fn main() {
 		.add_plugin(PanCamPlugin::default())
 		.add_plugin(MousePosPlugin::SingleCamera)
 		.add_startup_system(setup)
-    	.add_state(AppState::Default)
-		.add_system_set(
-			ConditionSet::new()
-				.run_in_state(AppState::Default)
-				.with_system(keyboard_input_system)
-				.with_system(mouseover_system)
-				.into()
-		)
-		.add_system_set(
-			ConditionSet::new()
-				.run_in_state(AppState::PlacingObject)
-				.with_system(placing_system)
-				.into()
-		)
-    	.add_system(object_system)
+		.add_state(AppState::Default)
+		.add_system_set(SystemSet::on_update(AppState::Default).with_system(mouseover_system))
+		.add_system_set(SystemSet::on_update(AppState::PlacingObject).with_system(placing_system))
+		.add_system(keyboard_input_system)
+		.add_system(object_system)
 		.init_resource::<GameState>()
 		.run();
 }
@@ -71,17 +60,19 @@ fn mouseover_system(
 		if let Some(size) = sprite.custom_size {
 			let hw = size.x / 2.0;
 			let hh = size.y / 2.0;
-			if mouse.x > transform.translation.x - hw &&
-				mouse.y > transform.translation.y - hh &&
-				mouse.x < transform.translation.x + hw &&
-				mouse.y < transform.translation.y + hh
+			if mouse.x > transform.translation.x - hw
+				&& mouse.y > transform.translation.y - hh
+				&& mouse.x < transform.translation.x + hw
+				&& mouse.y < transform.translation.y + hh
 			{
 				state.hovering = Some(entity);
 				found_hover = true;
 			}
 		}
-    }
-	if !found_hover { state.hovering = None }
+	}
+	if !found_hover {
+		state.hovering = None
+	}
 
 	if state.hovering != old_state {
 		info!("Hovering: {:?}", state.hovering);
@@ -89,15 +80,28 @@ fn mouseover_system(
 }
 
 #[derive(Default, Clone, Copy)]
-enum Orientation { Vertical, #[default] Horizontal }
-impl Orientation { fn swap(&mut self) { *self = match *self { Self::Horizontal => Self::Vertical, Self::Vertical => Self::Horizontal } } }
+enum Orientation {
+	Vertical,
+	#[default]
+	Horizontal,
+}
 
-#[derive(Component, Default)]
+impl Orientation {
+	fn swap(&mut self) {
+		*self = match *self {
+			Self::Horizontal => Self::Vertical,
+			Self::Vertical => Self::Horizontal,
+		}
+	}
+}
+
+#[derive(Component, Default, Clone)]
 struct ObjectData {
 	orientation: Orientation,
 	location: Vec2,
 	size: f32, // Size of longer side
 }
+
 impl ObjectData {
 	fn gen_sprite(&self, expr: &Expr) -> Sprite {
 		Sprite {
@@ -108,9 +112,9 @@ impl ObjectData {
 			color: match expr {
 				Expr::Function { .. } => Color::BLUE,
 				Expr::Application { .. } => Color::GRAY,
-				Expr::Variable => Color::RED
+				Expr::Variable => Color::RED,
 			},
-    		..default()
+			..default()
 		}
 	}
 }
@@ -121,6 +125,7 @@ struct Object {
 	expr: Expr,
 	placing: Placing,
 }
+
 #[derive(Component, Default, Clone)]
 struct Placing;
 
@@ -138,13 +143,27 @@ fn keyboard_input_system(
 					expr: Expr::Function {
 						bind: Binding::None,
 						expr: None,
-					}, ..default()
+					},
+					data: ObjectData {
+						orientation: Orientation::Horizontal,
+						location: Vec2::new(0.0, 0.0),
+						size: 32.0,
+					},
+					..default()
 				});
-				app_state.set(AppState::PlacingObject);
+				app_state.set(AppState::PlacingObject).unwrap();
 			} else if keyboard_input.just_pressed(KeyCode::V) {
 				info!("Placing Variable Block");
-				commands.spawn_bundle(Object::default());
-				app_state.set(AppState::PlacingObject);
+				commands.spawn_bundle(Object {
+					expr: Expr::Variable,
+					data: ObjectData {
+						orientation: Orientation::Horizontal,
+						location: Vec2::new(0.0, 0.0),
+						size: 32.0,
+					},
+					..default()
+				});
+				app_state.set(AppState::PlacingObject).unwrap();
 			}
 		}
 		AppState::PlacingObject => {
@@ -157,32 +176,45 @@ fn keyboard_input_system(
 
 fn object_system(
 	mut commands: Commands,
-	mut state: ResMut<GameState>,
-	objects: Query<(Entity, &ObjectData, &Expr, Option<&Sprite>), Without<Placing>>,
+	state: ResMut<GameState>,
+	app_state: ResMut<State<AppState>>,
+	mut objects: Query<(Entity, &ObjectData, &Expr, Option<&Sprite>)>,
 ) {
-	for (entity, data, expr, sprite) in objects.iter() {
-		let sprite = sprite.get_or_insert()
-		if sprite.is_none() {
-			commands.entity(entity).insert_bundle(SpriteBundle {
-				sprite: data.gen_sprite(expr),
-				transform: Transform::from_xyz(data.location.x, data.location.y, 0.0),
-				..default()
-			})
+	for (entity, data, expr, sprite) in objects.iter_mut() {
+		if sprite.is_some() {
+			commands.entity(entity).remove_bundle::<SpriteBundle>();
 		}
+
+		// let data = if let AppState::PlacingObject = app_state.current() {
+		// 	let mut data = (*data).clone();
+		// 	data.orientation = state.placing_orientation;
+		// 	data
+		// } else {
+		// 	(*data).clone()
+		// };
+
+		commands.entity(entity).insert_bundle(SpriteBundle {
+			sprite: data.gen_sprite(expr),
+			transform: Transform::from_xyz(data.location.x, data.location.y, 0.0),
+			..default()
+		});
 	}
 }
 
 fn placing_system(
 	mut commands: Commands,
-	mut app_state: ResMut<State<AppState>>,
 	mouse: Res<Input<MouseButton>>,
 	mouse_pos: Res<MousePosWorld>,
-	placing: Query<(Entity, &mut ObjectData), With<Placing>>
+	state: ResMut<GameState>,
+	mut app_state: ResMut<State<AppState>>,
+	mut placing: Query<(Entity, &mut ObjectData), With<Placing>>,
 ) {
 	let (entity, mut data) = placing.iter_mut().next().unwrap();
 	data.location = Vec2::new(mouse_pos.x, mouse_pos.y);
+	data.orientation = state.placing_orientation;
 
 	if mouse.just_pressed(MouseButton::Left) {
 		commands.entity(entity).remove::<Placing>();
+		app_state.set(AppState::Default).unwrap();
 	}
 }
