@@ -1,15 +1,18 @@
-use std::f32::consts::{FRAC_1_SQRT_2, FRAC_PI_2};
+use std::f32::consts::{FRAC_1_SQRT_2};
 
 use bevy::prelude::*;
 // use bevy_mod_picking::{DebugEventsPickingPlugin, DefaultPickingPlugins, PickableBundle, PickingCameraBundle, PickingEvent};
 use bevy_mouse_tracking_plugin::{MainCamera, MousePosPlugin, MousePosWorld};
 use bevy_pancam::{PanCam, PanCamPlugin};
+use mouseover::{Hovering, Side};
+use objects::{Object, ObjectData, Orientation};
 
 mod expr;
 mod name;
 mod parse;
 mod objects;
 mod ui;
+mod mouseover;
 
 use crate::{objects::{Binding, Expr}};
 
@@ -32,7 +35,7 @@ fn main() {
 		.add_system_set(SystemSet::on_update(AppState::PlacingObject).with_system(placing_system))
 		// .add_system(keyboard_input_system)
 		.add_system(object_system)
-		.add_system(mouseover_system.before(object_system))
+		.add_system(mouseover::mouseover_system.before(object_system))
 		.add_system(ui::button_system)
 		.init_resource::<GameState>()
 		.run();
@@ -44,7 +47,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
 		.insert(MainCamera)
 		.insert(PanCam::default());
 
-	asset_server.load_folder("assets");
+	// asset_server.load_folder("assets");
 }
 
 #[derive(Default)]
@@ -54,137 +57,12 @@ struct GameState {
 	hovering: Option<Entity>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
-enum Side {
-	First,
-	Second,
-}
-#[derive(Component, Debug, PartialEq, Eq)]
-struct Hovering(u32, Side);
-impl PartialOrd for Hovering {
-	fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-		self.0.partial_cmp(&other.0)
-	}
-}
-impl Ord for Hovering {
-	fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-		self.0.cmp(&other.0)
-	}
-}
-
-fn mouseover_system(
-	mut commands: Commands,
-	mouse: Query<&MousePosWorld, (Changed<MousePosWorld>, With<MainCamera>)>,
-	objects: Query<(Entity, &ObjectData), Without<Placing>>,
-) {
-	if let Ok(mouse) = mouse.get_single() {
-		// info!("Mouse Coords: {}", mouse);
-		let mut hover_index = 0;
-		for (entity, data) in objects.iter() {
-			let loc = data.location;
-			let size = data.size();
-			let hw = size.x / 2.0;
-			let hh = size.y / 2.0;
-
-			if mouse.x > loc.x - hw
-				&& mouse.y > loc.y - hh
-				&& mouse.x < loc.x + hw
-				&& mouse.y < loc.y + hh
-			{
-				let side = match data.orientation {
-					Orientation::Horizontal if mouse.x < loc.x => Side::First,
-					Orientation::Vertical if mouse.y < loc.y => Side::First,
-					_ => Side::Second,
-				};
-				commands.entity(entity).insert(Hovering(hover_index, side));
-				hover_index += 1;
-			} else {
-				commands.entity(entity).remove::<Hovering>();
-			}
-		}
-	}
-}
-
-#[derive(Default, Clone, Copy)]
-enum Orientation {
-	Vertical,
-	#[default]
-	Horizontal,
-}
-
-impl Orientation {
-	fn swap(&mut self) {
-		*self = match *self {
-			Self::Horizontal => Self::Vertical,
-			Self::Vertical => Self::Horizontal,
-		}
-	}
-}
 
 #[derive(Component, Default, Clone)]
-struct ObjectData {
-	orientation: Orientation,
-	location: Vec2,
-	size: f32, // Size of longer side
-}
-
-impl ObjectData {
-	fn gen_color(&self, expr: &Expr, hovering: bool) -> Color {
-		let color = match expr {
-			Expr::Function { .. } => Color::BLUE,
-			Expr::Application { .. } => Color::GRAY,
-			Expr::Variable => Color::RED,
-		};
-		if !hovering {
-			color
-		} else {
-			color + Color::rgb_u8(100, 100, 100)
-		}
-	}
-	fn gen_sprite(&self, expr: &Expr) -> Sprite {
-		Sprite {
-			custom_size: Some(self.size()),
-			color: self.gen_color(expr, false),
-			..default()
-		}
-	}
-	fn gen_texture(&self, expr: &Expr, asset_server: &AssetServer) -> Handle<Image> {
-		match expr {
-			Expr::Variable => asset_server.load("VariableDot.png"),
-			Expr::Function { bind: Binding::None, expr: None } => asset_server.load("Lambda.png"),
-			Expr::Function { .. } => asset_server.load("LambdaDot.png"),
-			Expr::Application { .. } => asset_server.load("Application.png"),
-		}
-	}
-	fn gen_transform(&self, z_loc: f32) -> Transform {
-		Transform {
-			translation: Vec3::new(self.location.x, self.location.y, z_loc),
-			rotation: match self.orientation {
-				Orientation::Horizontal => Quat::IDENTITY,
-				Orientation::Vertical => Quat::from_rotation_z(FRAC_PI_2),
-			},
-			scale: Vec3::ONE,
-		}
-	}
-
-	// Gen rectangles of A4-paper size
-	fn size(&self) -> Vec2 {
-		Vec2::new(self.size, self.size * FRAC_1_SQRT_2)
-	}
-}
-
-#[derive(Bundle, Default)]
-struct Object {
-	data: ObjectData,
-	expr: Expr,
-	placing: Placing,
-}
-
-#[derive(Component, Default, Clone)]
-struct Placing;
+pub struct Placing;
 
 fn place_expr(mut commands: Commands, app_state: &mut State<AppState>, state: &mut GameState, expr: Expr) {
-	commands.spawn_bundle(Object { expr, ..default() });
+	commands.spawn_bundle(Object { expr, ..default() }).insert(Placing);
 	app_state.set(AppState::PlacingObject).unwrap();
 	state.placing_index += 1.0;
 }
@@ -278,13 +156,9 @@ fn placing_system(
 				Orientation::Horizontal => Vec2::new(h_data.size / 4.0, 0.0),
 				Orientation::Vertical => Vec2::new(0.0, h_data.size / 4.0),
 			};
-			match hovering.1 {
-				Side::First => {
-					data.location = h_data.location - half_h_size_oriented;
-				}
-				Side::Second => {
-					data.location = h_data.location + half_h_size_oriented;
-				}
+			match hovering.side {
+				Side::First => data.location = h_data.location - half_h_size_oriented,
+				Side::Second => data.location = h_data.location + half_h_size_oriented,
 			}
 		}
 	}
