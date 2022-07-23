@@ -18,7 +18,6 @@ opt-level = 1
 [profile.dev.package."*"]
 opt-level = 3
 
-
 [dependencies]
 # Parser stuff
 hashdb = { git = "https://github.com/libdither/disp" }
@@ -32,6 +31,7 @@ rkyv = { version = "0.7.39", features = ["validation"] }
 thiserror = "1.0.31"
 bevy_pancam = "0.3.0"
 bevy_mouse_tracking_plugin = { git = "https://github.com/JoJoJet/bevy-mouse-tracking" }
+iyes_loopless = "0.6.1"
 
 # Stuff for Zyansheep, I use NixOS btw :)
 [package.metadata.nix]
@@ -41,6 +41,7 @@ app = true
 cCompiler = "gcc12"
 nativeBuildInputs = [
 	"cargo-edit",
+	"cargo-watch",
 	"pkgconfig",
 	"cmake",
 	"mold",
