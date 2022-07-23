@@ -202,10 +202,7 @@ impl ObjectData {
 	}
 	fn gen_sprite(&self, expr: &Expr) -> Sprite {
 		Sprite {
-			custom_size: Some(match self.orientation {
-				Orientation::Horizontal => Vec2::new(self.size, self.size * FRAC_1_SQRT_2),
-				Orientation::Vertical => Vec2::new(self.size * FRAC_1_SQRT_2, self.size),
-			}),
+			custom_size: Some(self.size()),
 			color: self.gen_color(expr, false),
 			..default()
 		}
@@ -305,26 +302,8 @@ fn placing_system(
 	mouse_pos: Res<MousePosWorld>,
 	mut state: ResMut<GameState>,
 	mut app_state: ResMut<State<AppState>>,
-	mut placing: Query<
-		(
-			Entity,
-			&mut ObjectData,
-			&Expr,
-			Option<&mut Sprite>,
-			Option<&mut Transform>,
-		),
-		With<Placing>,
-	>,
-	mut other_objects: Query<
-		(
-			Entity,
-			&mut ObjectData,
-			&Sprite,
-			&Transform,
-			Option<&Hovering>,
-		),
-		Without<Placing>,
-	>,
+	mut placing: Query<(Entity, &mut ObjectData, &Expr, Option<&mut Sprite>, Option<&mut Transform>), With<Placing>>,
+	mut other_objects: Query<(&mut ObjectData, Option<&Hovering>), Without<Placing>>,
 	keyboard_input: Res<Input<KeyCode>>,
 	camera_proj: Query<&OrthographicProjection, With<Camera>>,
 ) {
@@ -334,16 +313,11 @@ fn placing_system(
 	data.orientation = state.placing_orientation;
 
 	let mut obj_iter = other_objects.iter_mut();
-	if let Some((mut h_entity, mut h_data, mut h_sprite, mut h_transform, mut h_hovering)) =
-		obj_iter.next()
-	{
+	if let Some((mut h_data, mut h_hovering)) = obj_iter.next() {
 		// Find top hovered object
-		for (o_entity, o_data, o_sprite, o_transform, o_hovering) in obj_iter {
+		for (o_data, o_hovering) in obj_iter {
 			if h_hovering < o_hovering {
-				h_entity = o_entity;
 				h_data = o_data;
-				h_sprite = o_sprite;
-				h_transform = o_transform;
 				h_hovering = o_hovering;
 			}
 		}
@@ -354,12 +328,12 @@ fn placing_system(
 			orientation.swap();
 			data.orientation = orientation;
 			data.size = size;
+
 			let h_size = h_data.size();
 			let half_h_size_oriented = match h_data.orientation {
 				Orientation::Horizontal => Vec2::new(h_size.x / 4.0, 0.0),
 				Orientation::Vertical => Vec2::new(0.0, h_size.y / 4.0),
 			};
-			let half_h_size = h_data.size / 4.0;
 			match hovering.1 {
 				Side::First => {
 					data.location = h_data.location - half_h_size_oriented;
