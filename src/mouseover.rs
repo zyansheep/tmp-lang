@@ -32,14 +32,18 @@ pub fn mouseover_system(
 		for (entity, data) in objects.iter() {
 			let loc = data.location;
 			let size = data.size();
-			let hw = size.x / 2.0;
-			let hh = size.y / 2.0;
+
+			let (hw, hh) = match data.orientation {
+				Orientation::Horizontal => (size.x / 2.0, size.y / 2.0),
+				Orientation::Vertical => (size.y / 2.0, size.x / 2.0),
+			};
 
 			if mouse.x > loc.x - hw
 				&& mouse.y > loc.y - hh
 				&& mouse.x < loc.x + hw
 				&& mouse.y < loc.y + hh
 			{
+				// info!("{:?}: {} < {} < {}, {} < {} < {}", entity, loc.x - hw, mouse.x, loc.x + hw, loc.y - hh, mouse.y, loc.y + hh);
 				let side = match data.orientation {
 					Orientation::Horizontal if mouse.x < loc.x => Side::First,
 					Orientation::Vertical if mouse.y < loc.y => Side::First,

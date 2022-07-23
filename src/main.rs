@@ -35,26 +35,24 @@ fn main() {
 		.add_system_set(SystemSet::on_update(AppState::PlacingObject).with_system(placing_system))
 		// .add_system(keyboard_input_system)
 		.add_system(object_system)
-		.add_system(mouseover::mouseover_system.before(object_system))
+		.add_system(mouseover::mouseover_system)
 		.add_system(ui::button_system)
 		.init_resource::<GameState>()
 		.run();
 }
 
-fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
+fn setup(mut commands: Commands) {
 	commands
 		.spawn_bundle(OrthographicCameraBundle::new_2d())
 		.insert(MainCamera)
 		.insert(PanCam::default());
-
-	// asset_server.load_folder("assets");
 }
 
 #[derive(Default)]
 pub struct GameState {
 	placing_orientation: Orientation,
 	placing_index: f32,
-	hovering: Option<Entity>,
+	top_hovering: Option<Entity>,
 }
 
 #[derive(Component, Default, Clone)]
@@ -73,6 +71,7 @@ fn place_expr(
 	state.placing_index += 1.0;
 }
 
+// System for triggering things based on keyboard input
 fn keyboard_input_system(
 	mut commands: Commands,
 	mut state: ResMut<GameState>,
@@ -102,41 +101,46 @@ fn keyboard_input_system(
 			},
 		);
 	} else if keyboard_input.just_pressed(KeyCode::D) {
-		info!("Deleting Block");
-		if let Some(entity) = state.hovering {
+		if let Some(entity) = state.top_hovering {
 			commands.entity(entity).despawn();
 		}
 	}
 }
 
+// System for updating blocks based on external state
 fn object_system(
 	mut objects: Query<
-		(Entity, &ObjectData, &Expr, &mut Sprite, Option<&Hovering>),
+		(Entity, &ObjectData, &mut Sprite, Option<&Hovering>),
 		Without<Placing>,
 	>,
 	mut state: ResMut<GameState>,
 ) {
 	let mut obj_iter = objects.iter_mut();
-	if let Some((mut entity, mut data, mut expr, mut sprite, mut hovering)) = obj_iter.next() {
+	if let Some((mut entity, mut data, mut sprite, mut hovering)) = obj_iter.next() {
 		// Find top hovered object
-		for (o_entity, o_data, o_expr, o_sprite, o_hovering) in obj_iter {
-			if hovering <= o_hovering {
+		for (o_entity, o_data, mut o_sprite, o_hovering) in obj_iter {
+			if state.top_hovering == Some(o_entity) {
+				o_sprite.color = o_data.gen_color(false)
+			}
+			if hovering < o_hovering {
 				entity = o_entity;
 				data = o_data;
 				sprite = o_sprite;
-				expr = o_expr;
 				hovering = o_hovering;
 			}
-			sprite.color = data.gen_color(expr, false)
 		}
-		sprite.color = data.gen_color(expr, hovering.is_some());
-		state.hovering = Some(entity);
+		state.top_hovering = if let Some(_) = hovering {
+			sprite.color = data.gen_color(true);
+			Some(entity)
+		} else { None }
+		
 	}
 	/* for (_entity, data, expr, mut sprite, hovering) in objects.iter_mut() {
 		sprite.color = data.gen_color(expr, hovering.is_some());
 	} */
 }
 
+// System for placing blocks on the canvas and inside other blocks
 fn placing_system(
 	mut commands: Commands,
 	mouse: Res<Input<MouseButton>>,
@@ -147,7 +151,7 @@ fn placing_system(
 		(
 			Entity,
 			&mut ObjectData,
-			&Expr,
+			&mut Expr,
 			Option<&mut Sprite>,
 			Option<&mut Transform>,
 		),
@@ -161,10 +165,12 @@ fn placing_system(
 	camera_proj: Query<&OrthographicProjection, With<Camera>>,
 	asset_server: Res<AssetServer>,
 ) {
-	let (entity, mut data, expr, sprite, transform) = placing.single_mut();
-	data.size = camera_proj.iter().next().unwrap().scale * 512.0;
-	data.location = Vec2::new(mouse_pos.x, mouse_pos.y);
-	data.orientation = state.placing_orientation;
+	// Fetch data on block-to-place
+	let (entity, mut data, mut expr, sprite, transform) = placing.single_mut();
+
+	data.size = camera_proj.iter().next().unwrap().scale * 512.0; // Scale block-to-place with size
+	data.location = Vec2::new(mouse_pos.x, mouse_pos.y); // Move block-to-place to mouse cursor
+	data.orientation = state.placing_orientation; // Set orientation based on game state
 
 	let mut obj_iter = other_objects.iter_mut();
 	if let Some((mut h_entity, mut h_data, mut h_expr, mut h_hovering)) = obj_iter.next() {
@@ -215,22 +221,22 @@ fn placing_system(
 			}
 		}
 	}
-
+	
 	// Place block on blank canvas
 	if mouse.just_pressed(MouseButton::Left) {
 		commands.entity(entity).remove::<Placing>();
 		app_state.set(AppState::Default).unwrap();
 	}
 
-	// If sprite exists, update it, otherwise create new sprite
+	// Generate / Update visuals from Object data
 	if let (Some(mut sprite), Some(mut transform)) = (sprite, transform) {
-		*sprite = data.gen_sprite(expr);
+		*sprite = data.gen_sprite(&expr);
 		*transform = data.gen_transform(state.placing_index);
 	} else {
 		commands.entity(entity).insert_bundle(SpriteBundle {
-			sprite: data.gen_sprite(expr),
+			sprite: data.gen_sprite(&expr),
 			transform: data.gen_transform(state.placing_index),
-			texture: data.gen_texture(expr, &*asset_server),
+			texture: data.gen_texture(&expr, &*asset_server),
 			..default()
 		});
 	}
@@ -238,8 +244,20 @@ fn placing_system(
 	// Press R to rotate while placing
 	if keyboard_input.just_pressed(KeyCode::R) {
 		state.placing_orientation.swap();
-	} else if keyboard_input.just_pressed(KeyCode::Escape) {
+	}
+	// Press Escape to stop placing block
+	if keyboard_input.just_pressed(KeyCode::Escape) {
 		commands.entity(entity).despawn();
 		app_state.set(AppState::Default).unwrap();
+	}
+	// Change placing Expr variant
+	if keyboard_input.just_pressed(KeyCode::A) {
+		*expr = Expr::Application { func: None, args: None };
+	}
+	if keyboard_input.just_pressed(KeyCode::F) {
+		*expr = Expr::Function { bind: Binding::None, expr: None };
+	}
+	if keyboard_input.just_pressed(KeyCode::V) {
+		*expr = Expr::Variable;
 	}
 }

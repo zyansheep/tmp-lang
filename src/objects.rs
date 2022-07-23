@@ -41,22 +41,22 @@ pub struct ObjectData {
 }
 
 impl ObjectData {
-	pub fn gen_color(&self, expr: &Expr, hovering: bool) -> Color {
-		let color = match expr {
+	pub fn gen_color(&self, hovering: bool) -> Color {
+		/* let color = match expr {
 			Expr::Function { .. } => Color::BLUE,
 			Expr::Application { .. } => Color::GRAY,
 			Expr::Variable => Color::RED,
-		};
+		}; */
 		if !hovering {
-			color
+			Color::GRAY
 		} else {
-			color + Color::rgb_u8(100, 100, 100)
+			Color::rgb_u8(255, 255, 255)
 		}
 	}
 	pub fn gen_sprite(&self, expr: &Expr) -> Sprite {
 		Sprite {
 			custom_size: Some(self.size()),
-			color: self.gen_color(expr, false),
+			color: self.gen_color(false),
 			..default()
 		}
 	}
