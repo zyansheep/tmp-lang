@@ -244,6 +244,7 @@ fn placing_system(
 	mut other_objects: Query<(&mut ObjectData, Option<&Hovering>), Without<Placing>>,
 	keyboard_input: Res<Input<KeyCode>>,
 	camera_proj: Query<&OrthographicProjection, With<Camera>>,
+	asset_server: Res<AssetServer>,
 ) {
 	let (entity, mut data, expr, sprite, transform) = placing.single_mut();
 	data.size = camera_proj.iter().next().unwrap().scale * 512.0;
@@ -291,6 +292,7 @@ fn placing_system(
 		commands.entity(entity).insert_bundle(SpriteBundle {
 			sprite: data.gen_sprite(expr),
 			transform: Transform::from_xyz(data.location.x, data.location.y, state.placing_index),
+			texture: asset_server.load("block.png"),
 			..default()
 		});
 	}
