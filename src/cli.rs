@@ -1,26 +1,10 @@
-#![feature(iter_intersperse)]
-#![feature(option_result_contains)]
-#![feature(generic_associated_types)]
-#![feature(type_alias_impl_trait)]
-#![feature(try_blocks)]
-
 use hashdb::LinkArena;
-
 use name::NamespaceMut;
 use parse::parse;
 
+mod expr;
 mod name;
 mod parse;
-
-use std::fs;
-
-use ariadne::Source;
-use chumsky::Parser;
-use rustyline::{error::ReadlineError, Editor};
-
-use hashdb::*;
-
-use name::*;
 
 pub fn print_usage() {
 	println!("USAGE: tmp-lang <filename>")
@@ -33,126 +17,38 @@ pub fn read_from_file(filename: &str) -> Result<String, String> {
 pub fn run_cli_args_file() -> Result<(), String> {
 	let mut input_files: Vec<String> = vec![];
 	for arg in std::env::args() {
-		match arg {
+		match arg.as_str() {
+			"-i" => {
+				cli_editor();
+				return Ok(());
+			}
 			_ => input_files.push(arg),
 		};
 	}
-	if input_files.len() == 0 {
+	if input_files.is_empty() {
 		return Err("no input files".into());
 	} else if input_files.len() > 1 {
 		return Err("multiple input files".into());
 	}
-	let file_content = read_from_file(input_files[0].as_str());
+	let file_content =
+		read_from_file(input_files[0].as_str()).map_err(|_| "could not read file".to_owned())?;
 	let exprs = &LinkArena::new();
 	let namespace = &mut NamespaceMut::new();
-	let parsed = parse("[x y] x y", namespace, exprs).unwrap();
-	return Err("not implemented".into());
+	let _parsed = parse(file_content.as_str(), namespace, exprs).unwrap();
 	Ok(())
 }
 
-fn repl() -> Result<(), Box<dyn std::error::Error>> {
-	let exprs = &LinkArena::new();
-	let db = &mut Datastore::new();
-
-	let _load_file = std::env::args().nth(1);
-
-	/* if let Some(file) = &load_file {
-		db.load(fs::File::open(file).unwrap()).expect("could not load disp file")
-	} */
-
-	let mut rl =
-		Editor::<()>::with_config(rustyline::Config::builder().max_history_size(1000).build());
-	println!("Welcome to disp (λ)");
-	if rl.load_history(".disp_history").is_err() {
-		// println!("No previous history.");
+fn cli_editor() {
+	use rustyline::Editor;
+	println!("tmp-lang cli editor!");
+	let mut editor = Editor::<()>::new().unwrap();
+	let readline = editor.readline("=> ");
+	match readline {
+		Ok(line) => println!("line: '{:?}'", line),
+		Err(_) => println!("no input"),
 	}
-
-	let binds = &LinkArena::new();
-	let bind_map = parse::BindMap::default();
-
-	// Current namespace of this REPL, contains all the currently accessible names
-	let namespace = NamespaceMut::new();
-
-	let parser = parse::command_parser(&namespace, exprs, binds, &bind_map);
-
-	loop {
-		let readline = rl.readline(">> ");
-		match readline {
-			Ok(line) => {
-				rl.add_history_entry(line.as_str());
-
-				use parse::Command;
-				match parser.parse(line.as_str()) {
-					Ok(Command::None) => {}
-					Ok(Command::Set(string, expr)) => {
-						println!("{expr}");
-						let reduced = expr.reduce(exprs).unwrap();
-						println!("{reduced}");
-						namespace.add(string, reduced, exprs);
-					}
-					Ok(Command::List) => namespace.for_each(|name| println!("{name}")),
-					Ok(Command::Reduce(expr)) => {
-						println!("{expr}");
-						let reduced = expr.reduce(exprs).unwrap();
-						println!("{reduced}");
-					}
-					Ok(Command::Load { file: filename }) => {
-						let result: anyhow::Result<()> = try {
-							let mut file = fs::File::open(filename)?;
-							let hash: TypedHash<Namespace> =
-								bincode::deserialize_from::<_, Hash>(&mut file)?.into();
-							let mut db = Datastore::new();
-							db.load(&mut file)?;
-							let clone = hash.fetch(&db, exprs)?.clone();
-							namespace.extend(&clone);
-						};
-						match result {
-							Err(err) => println!("failed to load: {err}"),
-							Ok(_) => {}
-						}
-					}
-					Ok(Command::Save {
-						file: filename,
-						overwrite: _,
-					}) => {
-						let saved_hash = {
-							db.clear();
-							namespace.store_inner(exprs).store(db).unwrap()
-						};
-						let mut file = fs::File::create(&filename).unwrap();
-						bincode::serialize_into(&mut file, saved_hash.as_hash())?;
-						db.save(&mut file)?;
-						println!("Saved current namespace to {}", &filename);
-					}
-					Ok(_) => {}
-					Err(errors) => {
-						parse::gen_report(errors)
-							.try_for_each(|report| report.print(Source::from(&line)))
-							.unwrap();
-					}
-				}
-			}
-			Err(ReadlineError::Interrupted) => {
-				println!("CTRL-C");
-			}
-			Err(ReadlineError::Eof) => {
-				println!("CTRL-D");
-				break;
-			}
-			Err(err) => {
-				println!("Error: {:?}", err);
-				break;
-			}
-		}
-	}
-	rl.save_history(".disp_history").unwrap();
-
-	/* if let Some(file) = &load_file {
-		db.save(fs::File::create(&file).unwrap()).unwrap()
-	} */
-	Ok(())
 }
 
 fn main() {
-	println!("hello world");
+	cli_editor();
 }

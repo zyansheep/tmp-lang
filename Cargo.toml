@@ -32,6 +32,7 @@ thiserror = "1.0.31"
 bevy_pancam = "0.3.0"
 bevy_mouse_tracking_plugin = { git = "https://github.com/JoJoJet/bevy-mouse-tracking" }
 iyes_loopless = "0.6.1"
+rustyline = "10.0.0"
 
 # Stuff for Zyansheep, I use NixOS btw :)
 [package.metadata.nix]
