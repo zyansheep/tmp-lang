@@ -1,6 +1,6 @@
 use hashdb::LinkArena;
 use name::NamespaceMut;
-use parse::parse;
+use parse::{command_parser, gen_report, parse};
 
 mod expr;
 mod name;
@@ -14,7 +14,60 @@ pub fn read_from_file(filename: &str) -> Result<String, String> {
 	std::fs::read_to_string(filename).map_err(|_| "could not open file".into())
 }
 
-pub fn run_cli_args_file() -> Result<(), String> {
+fn cli_editor() {
+	use ariadne::Source;
+	use chumsky::Parser;
+	use parse::Command;
+	use rustyline::Editor;
+
+	println!("tmp-lang cli editor!");
+	let mut editor = Editor::<()>::new().unwrap();
+	if editor.load_history(".editor_history").is_err() {}
+
+	let namespace = NamespaceMut::new();
+	let exprs = LinkArena::new();
+	let binds = LinkArena::new();
+	let bind_map = parse::BindMap::default();
+	let cmdparser = command_parser(&namespace, &exprs, &binds, &bind_map);
+	loop {
+		let text = match editor.readline("=> ") {
+			Ok(line) => line,
+			Err(_) => break,
+		};
+		match cmdparser.parse(text.as_str()) {
+			Ok(Command::None) => {}
+			Ok(Command::Set(string, expr)) => {
+				println!("{expr}");
+				let reduced = expr.reduce(&exprs).unwrap();
+				println!("{reduced}");
+				namespace.add(string, reduced, &exprs);
+			}
+			Ok(Command::List) => {
+				namespace.for_each(|name| println!("{name}"));
+			}
+			Ok(Command::Reduce(expr)) => {
+				println!("{expr}");
+				let reduced = expr.reduce(&exprs).unwrap();
+				println!("{reduced}");
+			}
+			// Ok(Command::Load { file }) => {
+			// 	todo!();
+			// }
+			// Ok(Command::Save { file, overwrite }) => {
+			// 	todo!();
+			// }
+			Ok(_) => {}
+			Err(errors) => {
+				gen_report(errors)
+					.try_for_each(|report| report.print(Source::from(&text)))
+					.unwrap();
+			}
+		}
+	}
+	editor.save_history(".editor_history").unwrap();
+}
+
+pub fn run_cli_args() -> Result<(), String> {
 	let mut input_files: Vec<String> = vec![];
 	for arg in std::env::args() {
 		match arg.as_str() {
@@ -36,17 +89,6 @@ pub fn run_cli_args_file() -> Result<(), String> {
 	let namespace = &mut NamespaceMut::new();
 	let _parsed = parse(file_content.as_str(), namespace, exprs).unwrap();
 	Ok(())
-}
-
-fn cli_editor() {
-	use rustyline::Editor;
-	println!("tmp-lang cli editor!");
-	let mut editor = Editor::<()>::new().unwrap();
-	let readline = editor.readline("=> ");
-	match readline {
-		Ok(line) => println!("line: '{:?}'", line),
-		Err(_) => println!("no input"),
-	}
 }
 
 fn main() {
