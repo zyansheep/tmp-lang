@@ -58,8 +58,81 @@ pub fn ui_setup(mut commands: Commands, asset_server: Res<AssetServer>) {
 						),
 						..default()
 					});
-				
+
+					parent
+						.spawn_bundle(ButtonBundle {
+							style: Style {
+								size: Size::new(Val::Undefined, Val::Px(35.0)),
+								margin: Rect {
+									left: Val::Auto,
+									right: Val::Auto,
+									top: Val::Px(20.),
+									..default()
+								},
+								justify_content: JustifyContent::Center,
+								align_items: AlignItems::Center,
+								..default()
+							},
+							color: Color::rgb(0.35, 0.75, 0.35).into(),
+							..default()
+						})
+						.with_children(|parent| {
+							parent.spawn_bundle(TextBundle {
+								style: Style {
+									size: Size::new(Val::Undefined, Val::Px(25.)),
+									margin: Rect {
+										left: Val::Auto,
+										right: Val::Auto,
+										..default()
+									},
+									..default()
+								},
+								text: Text::with_section(
+									"Visualize",
+									TextStyle {
+										font: asset_server.load("fonts/Inter.ttf"),
+										font_size: 25.,
+										color: Color::WHITE,
+									},
+									Default::default(),
+								),
+								..default()
+							});
+						})
+						.insert(ClickHandler(|| info!("button clicked")));
 				});
-			
 		});
+}
+
+#[derive(Component)]
+pub struct ClickHandler(fn() -> ());
+
+#[allow(clippy::type_complexity)]
+pub fn button_system(
+	mut interaction_query: Query<
+		(&Interaction, &mut UiColor, &Children),
+		(Changed<Interaction>, With<Button>),
+	>,
+	click_handler_query: Query<&ClickHandler, With<Button>>,
+) {
+	for (interaction, mut color, _children) in interaction_query.iter_mut() {
+		// let mut text = text_query.get_mut(children[0]).unwrap();
+		match *interaction {
+			Interaction::Clicked => {
+				// text.sections[0].value = "Press".to_string();
+				*color = Color::rgb(0.15, 0.15, 0.15).into();
+				for handler in click_handler_query.iter() {
+					handler.0();
+				}
+			}
+			Interaction::Hovered => {
+				// text.sections[0].value = "Hover".to_string();
+				*color = Color::rgb(0.25, 0.25, 0.25).into();
+			}
+			Interaction::None => {
+				// text.sections[0].value = "Button".to_string();
+				*color = Color::rgb(0.35, 0.75, 0.35).into();
+			}
+		};
+	}
 }

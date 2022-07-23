@@ -33,6 +33,7 @@ fn main() {
 		// .add_system(keyboard_input_system)
 		.add_system(object_system)
 		.add_system(mouseover_system.before(object_system))
+		.add_system(crate::ui::button_system)
 		.init_resource::<GameState>()
 		.run();
 }
