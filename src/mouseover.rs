@@ -3,7 +3,7 @@ use bevy_mouse_tracking_plugin::{MainCamera, MousePosWorld};
 
 use crate::{Placing, objects::{ObjectData, Orientation}};
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Side {
 	First,
 	Second,

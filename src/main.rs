@@ -125,7 +125,7 @@ fn placing_system(
 	mut state: ResMut<GameState>,
 	mut app_state: ResMut<State<AppState>>,
 	mut placing: Query<(Entity, &mut ObjectData, &Expr, Option<&mut Sprite>, Option<&mut Transform>), With<Placing>>,
-	mut other_objects: Query<(&mut ObjectData, Option<&Hovering>), Without<Placing>>,
+	mut other_objects: Query<(Entity, &mut ObjectData, &mut Expr, Option<&Hovering>), Without<Placing>>,
 	keyboard_input: Res<Input<KeyCode>>,
 	camera_proj: Query<&OrthographicProjection, With<Camera>>,
 	asset_server: Res<AssetServer>,
@@ -136,32 +136,57 @@ fn placing_system(
 	data.orientation = state.placing_orientation;
 
 	let mut obj_iter = other_objects.iter_mut();
-	if let Some((mut h_data, mut h_hovering)) = obj_iter.next() {
+	if let Some((mut h_entity, mut h_data, mut h_expr, mut h_hovering)) = obj_iter.next() {
 		// Find top hovered object
-		for (o_data, o_hovering) in obj_iter {
+		for (o_entity, o_data, o_expr, o_hovering) in obj_iter {
 			if h_hovering < o_hovering {
+				h_entity = o_entity;
 				h_data = o_data;
+				h_expr = o_expr;
 				h_hovering = o_hovering;
 			}
 		}
 		if let Some(hovering) = h_hovering {
-			// Check which side of top hovered block we need to place the block we are currently placing.
-			let size = (h_data.size * FRAC_1_SQRT_2) * 0.95;
-			let mut orientation = h_data.orientation;
-			orientation.swap();
-			data.orientation = orientation;
-			data.size = size;
+			if let Some((side, expr_slot)) = match (&mut *h_expr, hovering.side) {
+				(Expr::Function { bind: _, expr }, side) if expr.is_none() => Some((side, expr)),
+				(Expr::Application { func, args: _ }, Side::First) if func.is_none() => Some((Side::First, func)),
+				(Expr::Application { func: _, args }, Side::Second) if args.is_none() => Some((Side::Second, args)),
+				(_, _) => None,
+			} {
+				// Check which side of top hovered block we need to place the block we are currently placing.
+				let size = (h_data.size * FRAC_1_SQRT_2) * 0.95;
+				let mut orientation = h_data.orientation;
+				orientation.swap();
+				data.orientation = orientation;
+				data.size = size;
 
-			let half_h_size_oriented = match h_data.orientation {
-				Orientation::Horizontal => Vec2::new(h_data.size / 4.0, 0.0),
-				Orientation::Vertical => Vec2::new(0.0, h_data.size / 4.0),
-			};
-			match hovering.side {
-				Side::First => data.location = h_data.location - half_h_size_oriented,
-				Side::Second => data.location = h_data.location + half_h_size_oriented,
+				let half_h_size_oriented = match h_data.orientation {
+					Orientation::Horizontal => Vec2::new(h_data.size / 4.0, 0.0),
+					Orientation::Vertical => Vec2::new(0.0, h_data.size / 4.0),
+				};
+				match side {
+					Side::First => data.location = h_data.location - half_h_size_oriented,
+					Side::Second => data.location = h_data.location + half_h_size_oriented,
+				}
+
+				// Place block inside another block
+				if mouse.just_pressed(MouseButton::Left) {
+					*expr_slot = Some(entity);
+					commands.entity(h_entity).add_child(entity);
+					commands.entity(entity).remove::<Placing>();
+					app_state.set(AppState::Default).unwrap();
+					return;
+				}
 			}
 		}
 	}
+
+	// Place block on blank canvas
+	if mouse.just_pressed(MouseButton::Left) {
+		commands.entity(entity).remove::<Placing>();
+		app_state.set(AppState::Default).unwrap();
+	}
+
 	// If sprite exists, update it, otherwise create new sprite
 	if let (Some(mut sprite), Some(mut transform)) = (sprite, transform) {
 		*sprite = data.gen_sprite(expr);
@@ -183,9 +208,5 @@ fn placing_system(
 		app_state.set(AppState::Default).unwrap();
 	}
 
-	// Place block on Left Click
-	if mouse.just_pressed(MouseButton::Left) {
-		commands.entity(entity).remove::<Placing>();
-		app_state.set(AppState::Default).unwrap();
-	}
+	
 }
