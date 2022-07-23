@@ -1,18 +1,17 @@
 use std::f32::consts::FRAC_1_SQRT_2;
 
-use bevy::{prelude::*, sprite::Anchor};
+use bevy::prelude::*;
 // use bevy_mod_picking::{DebugEventsPickingPlugin, DefaultPickingPlugins, PickableBundle, PickingCameraBundle, PickingEvent};
 use bevy_mouse_tracking_plugin::{MainCamera, MousePosPlugin, MousePosWorld};
 use bevy_pancam::{PanCam, PanCamPlugin};
 
-use objects::Expr;
-
-use crate::objects::Binding;
-
 mod expr;
 mod name;
-mod objects;
 mod parse;
+mod objects;
+mod ui;
+
+use crate::{objects::{Binding, Expr}, ui::ui_setup};
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash)]
 enum AppState {
@@ -27,6 +26,7 @@ fn main() {
 		.add_plugin(PanCamPlugin::default())
 		.add_plugin(MousePosPlugin::SingleCamera)
 		.add_startup_system(setup)
+   		.add_startup_system(ui_setup)
 		.add_state(AppState::Default)
 		.add_system_set(SystemSet::on_update(AppState::Default).with_system(keyboard_input_system))
 		.add_system_set(SystemSet::on_update(AppState::PlacingObject).with_system(placing_system))
@@ -42,68 +42,6 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
 		.spawn_bundle(OrthographicCameraBundle::new_2d())
 		.insert(MainCamera)
 		.insert(PanCam::default());
-
-	commands.spawn_bundle(UiCameraBundle::default());
-
-	commands
-		.spawn_bundle(NodeBundle {
-			transform: Transform {
-				translation: Vec3::new(0., 0., 0.),
-				..default()
-			},
-			style: Style {
-				size: Size::new(Val::Percent(100.0), Val::Percent(100.0)),
-				justify_content: JustifyContent::SpaceBetween,
-				..default()
-			},
-			color: Color::NONE.into(),
-			..default()
-		})
-		.with_children(|parent| {
-			// right vertical fill
-			parent
-				.spawn_bundle(NodeBundle {
-					style: Style {
-						padding: Rect {
-							top: Val::Px(15.0),
-							bottom: Val::Px(15.0),
-							..default()
-						},
-						flex_direction: FlexDirection::ColumnReverse,
-						justify_content: JustifyContent::FlexStart,
-						size: Size::new(Val::Px(200.0), Val::Percent(100.0)),
-						..default()
-					},
-					color: Color::rgb(0.15, 0.15, 0.15).into(),
-					..default()
-				})
-				.with_children(|parent| {
-					// Title
-					parent.spawn_bundle(TextBundle {
-						style: Style {
-							size: Size::new(Val::Undefined, Val::Px(25.)),
-							margin: Rect {
-								left: Val::Auto,
-								right: Val::Auto,
-								..default()
-							},
-							..default()
-						},
-						text: Text::with_section(
-							"TMP App",
-							TextStyle {
-								font: asset_server.load("fonts/Inter.ttf"),
-								font_size: 25.,
-								color: Color::WHITE,
-							},
-							Default::default(),
-						),
-						..default()
-					});
-				
-				});
-			
-		});
 }
 
 #[derive(Default)]
@@ -133,11 +71,11 @@ impl Ord for Hovering {
 
 fn mouseover_system(
 	mut commands: Commands,
-	mouse: Query<&MousePosWorld, Changed<MousePosWorld>>,
+	mouse: Query<&MousePosWorld, (Changed<MousePosWorld>, With<MainCamera>)>,
 	objects: Query<(Entity, &ObjectData), Without<Placing>>,
 ) {
 	if let Ok(mouse) = mouse.get_single() {
-		// info!("Mouse Coords: {}", mouse);
+		info!("Mouse Coords: {}", mouse);
 		let mut hover_index = 0;
 		for (entity, data) in objects.iter() {
 			let loc = data.location;
