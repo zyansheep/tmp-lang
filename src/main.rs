@@ -1,8 +1,8 @@
 use std::f32::consts::FRAC_1_SQRT_2;
 
-use bevy::prelude::*;
+use bevy::{prelude::*, sprite::Anchor};
 // use bevy_mod_picking::{DebugEventsPickingPlugin, DefaultPickingPlugins, PickableBundle, PickingCameraBundle, PickingEvent};
-use bevy_mouse_tracking_plugin::{MousePosPlugin, MousePosWorld};
+use bevy_mouse_tracking_plugin::{MainCamera, MousePosPlugin, MousePosWorld};
 use bevy_pancam::{PanCam, PanCamPlugin};
 
 use objects::Expr;
@@ -32,15 +32,78 @@ fn main() {
 		.add_system_set(SystemSet::on_update(AppState::PlacingObject).with_system(placing_system))
 		// .add_system(keyboard_input_system)
 		.add_system(object_system)
-    	.add_system(mouseover_system.before(object_system))
+		.add_system(mouseover_system.before(object_system))
 		.init_resource::<GameState>()
 		.run();
 }
 
-fn setup(mut commands: Commands) {
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
 	commands
 		.spawn_bundle(OrthographicCameraBundle::new_2d())
+		.insert(MainCamera)
 		.insert(PanCam::default());
+
+	commands.spawn_bundle(UiCameraBundle::default());
+
+	commands
+		.spawn_bundle(NodeBundle {
+			transform: Transform {
+				translation: Vec3::new(0., 0., 0.),
+				..default()
+			},
+			style: Style {
+				size: Size::new(Val::Percent(100.0), Val::Percent(100.0)),
+				justify_content: JustifyContent::SpaceBetween,
+				..default()
+			},
+			color: Color::NONE.into(),
+			..default()
+		})
+		.with_children(|parent| {
+			// right vertical fill
+			parent
+				.spawn_bundle(NodeBundle {
+					style: Style {
+						padding: Rect {
+							top: Val::Px(15.0),
+							bottom: Val::Px(15.0),
+							..default()
+						},
+						flex_direction: FlexDirection::ColumnReverse,
+						justify_content: JustifyContent::FlexStart,
+						size: Size::new(Val::Px(200.0), Val::Percent(100.0)),
+						..default()
+					},
+					color: Color::rgb(0.15, 0.15, 0.15).into(),
+					..default()
+				})
+				.with_children(|parent| {
+					// Title
+					parent.spawn_bundle(TextBundle {
+						style: Style {
+							size: Size::new(Val::Undefined, Val::Px(25.)),
+							margin: Rect {
+								left: Val::Auto,
+								right: Val::Auto,
+								..default()
+							},
+							..default()
+						},
+						text: Text::with_section(
+							"TMP App",
+							TextStyle {
+								font: asset_server.load("fonts/Inter.ttf"),
+								font_size: 25.,
+								color: Color::WHITE,
+							},
+							Default::default(),
+						),
+						..default()
+					});
+				
+				});
+			
+		});
 }
 
 #[derive(Default)]
@@ -51,14 +114,21 @@ struct GameState {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-enum Side { First, Second }
+enum Side {
+	First,
+	Second,
+}
 #[derive(Component, Debug, PartialEq, Eq)]
 struct Hovering(u32, Side);
 impl PartialOrd for Hovering {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> { self.0.partial_cmp(&other.0) }
+	fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+		self.0.partial_cmp(&other.0)
+	}
 }
 impl Ord for Hovering {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering { self.0.cmp(&other.0) }
+	fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+		self.0.cmp(&other.0)
+	}
 }
 
 fn mouseover_system(
@@ -74,7 +144,7 @@ fn mouseover_system(
 			let size = data.size();
 			let hw = size.x / 2.0;
 			let hh = size.y / 2.0;
-			
+
 			if mouse.x > loc.x - hw
 				&& mouse.y > loc.y - hh
 				&& mouse.x < loc.x + hw
@@ -83,7 +153,7 @@ fn mouseover_system(
 				let side = match data.orientation {
 					Orientation::Horizontal if mouse.x < loc.x => Side::First,
 					Orientation::Vertical if mouse.y < loc.y => Side::First,
-					_ => Side::Second
+					_ => Side::Second,
 				};
 				commands.entity(entity).insert(Hovering(hover_index, side));
 				hover_index += 1;
@@ -124,7 +194,9 @@ impl ObjectData {
 			Expr::Application { .. } => Color::GRAY,
 			Expr::Variable => Color::RED,
 		};
-		if !hovering { color } else {
+		if !hovering {
+			color
+		} else {
 			color + Color::rgb_u8(100, 100, 100)
 		}
 	}
@@ -183,7 +255,10 @@ fn keyboard_input_system(
 	} else if keyboard_input.just_pressed(KeyCode::A) {
 		info!("Placing Application Block");
 		commands.spawn_bundle(Object {
-			expr: Expr::Application { func: None, args: None },
+			expr: Expr::Application {
+				func: None,
+				args: None,
+			},
 			..default()
 		});
 		app_state.set(AppState::PlacingObject).unwrap();
@@ -197,7 +272,10 @@ fn keyboard_input_system(
 }
 
 fn object_system(
-	mut objects: Query<(Entity, &ObjectData, &Expr, &mut Sprite, Option<&Hovering>), Without<Placing>>,
+	mut objects: Query<
+		(Entity, &ObjectData, &Expr, &mut Sprite, Option<&Hovering>),
+		Without<Placing>,
+	>,
 	mut state: ResMut<GameState>,
 ) {
 	let mut obj_iter = objects.iter_mut();
@@ -211,7 +289,7 @@ fn object_system(
 				expr = o_expr;
 				hovering = o_hovering;
 			}
-			sprite.color = data.gen_color(expr, false)	
+			sprite.color = data.gen_color(expr, false)
 		}
 		sprite.color = data.gen_color(expr, hovering.is_some());
 		state.hovering = Some(entity);
@@ -227,8 +305,26 @@ fn placing_system(
 	mouse_pos: Res<MousePosWorld>,
 	mut state: ResMut<GameState>,
 	mut app_state: ResMut<State<AppState>>,
-	mut placing: Query<(Entity, &mut ObjectData, &Expr, Option<&mut Sprite>, Option<&mut Transform>), With<Placing>>,
-	mut other_objects: Query<(Entity, &mut ObjectData, &Sprite, &Transform, Option<&Hovering>), Without<Placing>>,
+	mut placing: Query<
+		(
+			Entity,
+			&mut ObjectData,
+			&Expr,
+			Option<&mut Sprite>,
+			Option<&mut Transform>,
+		),
+		With<Placing>,
+	>,
+	mut other_objects: Query<
+		(
+			Entity,
+			&mut ObjectData,
+			&Sprite,
+			&Transform,
+			Option<&Hovering>,
+		),
+		Without<Placing>,
+	>,
 	keyboard_input: Res<Input<KeyCode>>,
 	camera_proj: Query<&OrthographicProjection, With<Camera>>,
 ) {
@@ -238,7 +334,9 @@ fn placing_system(
 	data.orientation = state.placing_orientation;
 
 	let mut obj_iter = other_objects.iter_mut();
-	if let Some((mut h_entity, mut h_data, mut h_sprite, mut h_transform, mut h_hovering)) = obj_iter.next() {
+	if let Some((mut h_entity, mut h_data, mut h_sprite, mut h_transform, mut h_hovering)) =
+		obj_iter.next()
+	{
 		// Find top hovered object
 		for (o_entity, o_data, o_sprite, o_transform, o_hovering) in obj_iter {
 			if h_hovering < o_hovering {
@@ -252,7 +350,8 @@ fn placing_system(
 		if let Some(hovering) = h_hovering {
 			// Check which side of top hovered block we need to place the block we are currently placing.
 			let size = (h_data.size * FRAC_1_SQRT_2) - (h_data.size / 10.0);
-			let mut orientation = h_data.orientation; orientation.swap();
+			let mut orientation = h_data.orientation;
+			orientation.swap();
 			data.orientation = orientation;
 			data.size = size;
 			let h_size = h_data.size();
@@ -283,7 +382,7 @@ fn placing_system(
 			..default()
 		});
 	}
-	
+
 	// Press R to rotate while placing
 	if keyboard_input.just_pressed(KeyCode::R) {
 		state.placing_orientation.swap();
