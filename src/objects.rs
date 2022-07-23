@@ -25,8 +25,8 @@ pub enum Orientation {
 }
 
 impl Orientation {
-	pub fn swap(&mut self) {
-		*self = match *self {
+	pub fn swap(self) -> Self {
+		match self {
 			Self::Horizontal => Self::Vertical,
 			Self::Vertical => Self::Horizontal,
 		}
@@ -38,10 +38,11 @@ pub struct ObjectData {
 	pub orientation: Orientation,
 	pub location: Vec2,
 	pub size: f32, // Size of longer side
+	pub parent: Option<Entity>,
 }
 
 impl ObjectData {
-	pub fn gen_color(&self, hovering: bool) -> Color {
+	pub fn gen_color(hovering: bool) -> Color {
 		/* let color = match expr {
 			Expr::Function { .. } => Color::BLUE,
 			Expr::Application { .. } => Color::GRAY,
@@ -53,14 +54,14 @@ impl ObjectData {
 			Color::rgb_u8(255, 255, 255)
 		}
 	}
-	pub fn gen_sprite(&self, expr: &Expr) -> Sprite {
+	pub fn gen_sprite(&self) -> Sprite {
 		Sprite {
-			custom_size: Some(self.size()),
-			color: self.gen_color(false),
+			custom_size: None,
+			color: Self::gen_color(false),
 			..default()
 		}
 	}
-	pub fn gen_texture(&self, expr: &Expr, asset_server: &AssetServer) -> Handle<Image> {
+	pub fn gen_texture(expr: &Expr, asset_server: &AssetServer) -> Handle<Image> {
 		match expr {
 			Expr::Variable => asset_server.load("VariableDot.png"),
 			Expr::Function { bind: Binding::None, expr: None } => asset_server.load("Lambda.png"),
@@ -69,13 +70,14 @@ impl ObjectData {
 		}
 	}
 	pub fn gen_transform(&self, z_loc: f32) -> Transform {
+		let scale = self.size / crate::IMAGE_SIZE;
 		Transform {
 			translation: Vec3::new(self.location.x, self.location.y, z_loc),
 			rotation: match self.orientation {
 				Orientation::Horizontal => Quat::IDENTITY,
 				Orientation::Vertical => Quat::from_rotation_z(FRAC_PI_2),
 			},
-			scale: Vec3::ONE,
+			scale: Vec3::new(scale, scale, 1.0),
 		}
 	}
 

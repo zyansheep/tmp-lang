@@ -1,36 +1,33 @@
 use bevy::prelude::*;
 use bevy_mouse_tracking_plugin::{MainCamera, MousePosWorld};
 
-use crate::{Placing, objects::{ObjectData, Orientation}};
+use crate::{GameState, Placing, objects::{ObjectData, Orientation}};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Side {
 	First,
 	Second,
 }
-#[derive(Component, Debug, PartialEq, Eq)]
-pub struct Hovering { pub index: u32, pub side: Side }
+#[derive(Component, Debug, PartialEq)]
+pub struct Hovering { pub order: f32, pub side: Side }
 impl PartialOrd for Hovering {
 	fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-		self.index.partial_cmp(&other.index)
-	}
-}
-impl Ord for Hovering {
-	fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-		self.index.cmp(&other.index)
+		self.order.partial_cmp(&other.order)
 	}
 }
 
+// Mark objects as currently being hovered over.
 pub fn mouseover_system(
 	mut commands: Commands,
 	mouse: Query<&MousePosWorld, (Changed<MousePosWorld>, With<MainCamera>)>,
-	objects: Query<(Entity, &ObjectData), Without<Placing>>,
+	objects: Query<(Entity, &ObjectData, &GlobalTransform), Without<Placing>>,
+	mut state: ResMut<GameState>,
 ) {
+	let (mut cur_hover_order, mut cur_entity) = (f32::MAX, None::<Entity>);
 	if let Ok(mouse) = mouse.get_single() {
 		// info!("Mouse Coords: {}", mouse);
-		let mut hover_index = 0;
-		for (entity, data) in objects.iter() {
-			let loc = data.location;
+		for (entity, data, transform) in objects.iter() {
+			let loc = transform.translation;
 			let size = data.size();
 
 			let (hw, hh) = match data.orientation {
@@ -44,16 +41,24 @@ pub fn mouseover_system(
 				&& mouse.y < loc.y + hh
 			{
 				// info!("{:?}: {} < {} < {}, {} < {} < {}", entity, loc.x - hw, mouse.x, loc.x + hw, loc.y - hh, mouse.y, loc.y + hh);
+				
 				let side = match data.orientation {
 					Orientation::Horizontal if mouse.x < loc.x => Side::First,
 					Orientation::Vertical if mouse.y < loc.y => Side::First,
 					_ => Side::Second,
 				};
-				commands.entity(entity).insert(Hovering { index: hover_index, side });
-				hover_index += 1;
+				// Order Hovered objects by their size, smallest hovered object should be the one highlighted
+				let hovering = Hovering { order: data.size, side };
+				if hovering.order <= cur_hover_order {
+					cur_hover_order = hovering.order;
+					cur_entity = Some(entity);
+				}
+				commands.entity(entity).insert(hovering);
+				
 			} else {
 				commands.entity(entity).remove::<Hovering>();
 			}
 		}
+		state.top_hovering = cur_entity;
 	}
 }

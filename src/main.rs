@@ -16,6 +16,8 @@ mod ui;
 
 use crate::objects::{Binding, Expr};
 
+const IMAGE_SIZE: f32 = 300.0;
+
 #[derive(Clone, PartialEq, Eq, Debug, Hash)]
 pub enum AppState {
 	Default,
@@ -34,7 +36,7 @@ fn main() {
 		.add_system_set(SystemSet::on_update(AppState::Default).with_system(keyboard_input_system))
 		.add_system_set(SystemSet::on_update(AppState::PlacingObject).with_system(placing_system))
 		// .add_system(keyboard_input_system)
-		.add_system(object_system)
+		.add_system(data_update).add_system(expr_update).add_system(hover_update)
 		.add_system(mouseover::mouseover_system)
 		.add_system(ui::button_system)
 		.init_resource::<GameState>()
@@ -102,42 +104,33 @@ fn keyboard_input_system(
 		);
 	} else if keyboard_input.just_pressed(KeyCode::D) {
 		if let Some(entity) = state.top_hovering {
-			commands.entity(entity).despawn();
+			commands.entity(entity).despawn()
 		}
 	}
 }
 
+fn data_update(mut objects: Query<(&ObjectData, &mut Transform), Changed<ObjectData>>) {
+	for (data, mut transform) in objects.iter_mut() {
+		let index = transform.translation.z;
+		*transform = data.gen_transform(index);
+	}
+}
+fn expr_update(mut objects: Query<(&Expr, &mut Handle<Image>), Changed<Expr>>, asset_server: Res<AssetServer>) {
+	for (expr, mut image) in objects.iter_mut() {
+		*image = ObjectData::gen_texture(&expr, &asset_server);
+	}
+}
 // System for updating blocks based on external state
-fn object_system(
+fn hover_update(
 	mut objects: Query<
-		(Entity, &ObjectData, &mut Sprite, Option<&Hovering>),
+		(Entity, &mut Sprite),
 		Without<Placing>,
 	>,
-	mut state: ResMut<GameState>,
+	state: ResMut<GameState>,
 ) {
-	let mut obj_iter = objects.iter_mut();
-	if let Some((mut entity, mut data, mut sprite, mut hovering)) = obj_iter.next() {
-		// Find top hovered object
-		for (o_entity, o_data, mut o_sprite, o_hovering) in obj_iter {
-			if state.top_hovering == Some(o_entity) {
-				o_sprite.color = o_data.gen_color(false)
-			}
-			if hovering < o_hovering {
-				entity = o_entity;
-				data = o_data;
-				sprite = o_sprite;
-				hovering = o_hovering;
-			}
-		}
-		state.top_hovering = if let Some(_) = hovering {
-			sprite.color = data.gen_color(true);
-			Some(entity)
-		} else { None }
-		
+	for (entity, mut sprite) in objects.iter_mut() {
+		sprite.color = ObjectData::gen_color(state.top_hovering == Some(entity));
 	}
-	/* for (_entity, data, expr, mut sprite, hovering) in objects.iter_mut() {
-		sprite.color = data.gen_color(expr, hovering.is_some());
-	} */
 }
 
 // System for placing blocks on the canvas and inside other blocks
@@ -153,38 +146,28 @@ fn placing_system(
 			&mut ObjectData,
 			&mut Expr,
 			Option<&mut Sprite>,
-			Option<&mut Transform>,
 		),
 		With<Placing>,
 	>,
 	mut other_objects: Query<
-		(Entity, &mut ObjectData, &mut Expr, Option<&Hovering>),
+		(Entity, &mut ObjectData, &mut Expr, &Hovering),
 		Without<Placing>,
 	>,
 	keyboard_input: Res<Input<KeyCode>>,
-	camera_proj: Query<&OrthographicProjection, With<Camera>>,
+	camera_proj: Query<&OrthographicProjection, With<MainCamera>>,
 	asset_server: Res<AssetServer>,
 ) {
 	// Fetch data on block-to-place
-	let (entity, mut data, mut expr, sprite, transform) = placing.single_mut();
+	let (entity, mut data, mut expr, sprite) = placing.single_mut();
 
-	data.size = camera_proj.iter().next().unwrap().scale * 512.0; // Scale block-to-place with size
+	data.size = camera_proj.iter().next().unwrap().scale * 300.0; // Scale block-to-place with size
 	data.location = Vec2::new(mouse_pos.x, mouse_pos.y); // Move block-to-place to mouse cursor
 	data.orientation = state.placing_orientation; // Set orientation based on game state
 
-	let mut obj_iter = other_objects.iter_mut();
-	if let Some((mut h_entity, mut h_data, mut h_expr, mut h_hovering)) = obj_iter.next() {
-		// Find top hovered object
-		for (o_entity, o_data, o_expr, o_hovering) in obj_iter {
-			if h_hovering < o_hovering {
-				h_entity = o_entity;
-				h_data = o_data;
-				h_expr = o_expr;
-				h_hovering = o_hovering;
-			}
-		}
-		if let Some(hovering) = h_hovering {
-			if let Some((side, expr_slot)) = match (&mut *h_expr, hovering.side) {
+	for (h_entity, h_data, mut h_expr, h_hovering) in other_objects.iter_mut() {
+		if state.top_hovering == Some(h_entity) {
+			// Make sure we can place block
+			if let Some((side, expr_slot)) = match (&mut *h_expr, h_hovering.side) {
 				(Expr::Function { bind: _, expr }, side) if expr.is_none() => Some((side, expr)),
 				(Expr::Application { func, args: _ }, Side::First) if func.is_none() => {
 					Some((Side::First, func))
@@ -194,56 +177,52 @@ fn placing_system(
 				}
 				(_, _) => None,
 			} {
-				// Check which side of top hovered block we need to place the block we are currently placing.
-				let size = (h_data.size * FRAC_1_SQRT_2) * 0.95;
-				let mut orientation = h_data.orientation;
-				orientation.swap();
-				data.orientation = orientation;
+				let size = (h_data.size * FRAC_1_SQRT_2) * 0.90;
+				data.orientation = h_data.orientation.swap();
 				data.size = size;
 
 				let half_h_size_oriented = match h_data.orientation {
 					Orientation::Horizontal => Vec2::new(h_data.size / 4.0, 0.0),
 					Orientation::Vertical => Vec2::new(0.0, h_data.size / 4.0),
 				};
-				match side {
-					Side::First => data.location = h_data.location - half_h_size_oriented,
-					Side::Second => data.location = h_data.location + half_h_size_oriented,
-				}
+				let relative_loc = match side {
+					Side::First => -half_h_size_oriented,
+					Side::Second => half_h_size_oriented,
+				};
+				data.location = h_data.location + relative_loc;
 
 				// Place block inside another block
 				if mouse.just_pressed(MouseButton::Left) {
 					*expr_slot = Some(entity);
-					commands.entity(h_entity).add_child(entity);
+					data.parent = Some(h_entity);
+					// commands.entity(h_entity).add_child(entity); // DONT DO THIS, YOUR LIFE WILL BE PAINNNN
 					commands.entity(entity).remove::<Placing>();
 					app_state.set(AppState::Default).unwrap();
 					return;
 				}
 			}
+			break
 		}
 	}
-	
-	// Place block on blank canvas
-	if mouse.just_pressed(MouseButton::Left) {
+	// Place block on blank canvas (if there are no objects in scene)
+	if mouse.just_pressed(MouseButton::Left) && other_objects.is_empty() {
 		commands.entity(entity).remove::<Placing>();
 		app_state.set(AppState::Default).unwrap();
 	}
-
+	
 	// Generate / Update visuals from Object data
-	if let (Some(mut sprite), Some(mut transform)) = (sprite, transform) {
-		*sprite = data.gen_sprite(&expr);
-		*transform = data.gen_transform(state.placing_index);
-	} else {
+	if sprite.is_none() {
 		commands.entity(entity).insert_bundle(SpriteBundle {
-			sprite: data.gen_sprite(&expr),
+			sprite: data.gen_sprite(),
 			transform: data.gen_transform(state.placing_index),
-			texture: data.gen_texture(&expr, &*asset_server),
+			texture: ObjectData::gen_texture(&expr, &*asset_server),
 			..default()
 		});
 	}
 
 	// Press R to rotate while placing
 	if keyboard_input.just_pressed(KeyCode::R) {
-		state.placing_orientation.swap();
+		state.placing_orientation = state.placing_orientation.swap();
 	}
 	// Press Escape to stop placing block
 	if keyboard_input.just_pressed(KeyCode::Escape) {
