@@ -62,7 +62,7 @@ pub fn ui_setup(mut commands: Commands, asset_server: Res<AssetServer>) {
 					parent
 						.spawn_bundle(ButtonBundle {
 							style: Style {
-								size: Size::new(Val::Undefined, Val::Px(35.0)),
+								padding: Rect::all(Val::Px(10.)),
 								margin: Rect {
 									left: Val::Auto,
 									right: Val::Auto,
@@ -79,7 +79,7 @@ pub fn ui_setup(mut commands: Commands, asset_server: Res<AssetServer>) {
 						.with_children(|parent| {
 							parent.spawn_bundle(TextBundle {
 								style: Style {
-									size: Size::new(Val::Undefined, Val::Px(25.)),
+									size: Size::new(Val::Undefined, Val::Undefined),
 									margin: Rect {
 										left: Val::Auto,
 										right: Val::Auto,
