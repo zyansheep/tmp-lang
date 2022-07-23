@@ -183,6 +183,12 @@ struct Object {
 #[derive(Component, Default, Clone)]
 struct Placing;
 
+fn place_expr(mut commands: Commands, app_state: &mut State<AppState>, state: &mut GameState, expr: Expr) {
+	commands.spawn_bundle(Object { expr, ..default() });
+	app_state.set(AppState::PlacingObject).unwrap();
+	state.placing_index += 1.0;
+}
+
 fn keyboard_input_system(
 	mut commands: Commands,
 	mut state: ResMut<GameState>,
@@ -190,32 +196,14 @@ fn keyboard_input_system(
 	keyboard_input: Res<Input<KeyCode>>,
 ) {
 	if keyboard_input.just_pressed(KeyCode::F) {
-		info!("Placing Function Block");
-		commands.spawn_bundle(Object {
-			expr: Expr::Function {
-				bind: Binding::None,
-				expr: None,
-			},
-			..default()
+		place_expr(commands, &mut app_state, &mut state, Expr::Function {
+			bind: Binding::None,
+			expr: None,
 		});
-		app_state.set(AppState::PlacingObject).unwrap();
-		state.placing_index += 1.0;
 	} else if keyboard_input.just_pressed(KeyCode::V) {
-		info!("Placing Variable Block");
-		commands.spawn_bundle(Object::default());
-		app_state.set(AppState::PlacingObject).unwrap();
-		state.placing_index += 1.0;
+		place_expr(commands, &mut app_state, &mut state, Expr::Variable);
 	} else if keyboard_input.just_pressed(KeyCode::A) {
-		info!("Placing Application Block");
-		commands.spawn_bundle(Object {
-			expr: Expr::Application {
-				func: None,
-				args: None,
-			},
-			..default()
-		});
-		app_state.set(AppState::PlacingObject).unwrap();
-		state.placing_index += 1.0;
+		place_expr(commands, &mut app_state, &mut state, Expr::Application { func: None, args: None });
 	} else if keyboard_input.just_pressed(KeyCode::D) {
 		info!("Deleting Block");
 		if let Some(entity) = state.hovering {
