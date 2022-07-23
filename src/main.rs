@@ -78,7 +78,7 @@ fn mouseover_system(
 	objects: Query<(Entity, &ObjectData), Without<Placing>>,
 ) {
 	if let Ok(mouse) = mouse.get_single() {
-		info!("Mouse Coords: {}", mouse);
+		// info!("Mouse Coords: {}", mouse);
 		let mut hover_index = 0;
 		for (entity, data) in objects.iter() {
 			let loc = data.location;
@@ -280,16 +280,15 @@ fn placing_system(
 		}
 		if let Some(hovering) = h_hovering {
 			// Check which side of top hovered block we need to place the block we are currently placing.
-			let size = (h_data.size * FRAC_1_SQRT_2) - (h_data.size / 10.0);
+			let size = (h_data.size * FRAC_1_SQRT_2) * 0.95;
 			let mut orientation = h_data.orientation;
 			orientation.swap();
 			data.orientation = orientation;
 			data.size = size;
 
-			let h_size = h_data.size();
 			let half_h_size_oriented = match h_data.orientation {
-				Orientation::Horizontal => Vec2::new(h_size.x / 4.0, 0.0),
-				Orientation::Vertical => Vec2::new(0.0, h_size.y / 4.0),
+				Orientation::Horizontal => Vec2::new(h_data.size / 4.0, 0.0),
+				Orientation::Vertical => Vec2::new(0.0, h_data.size / 4.0),
 			};
 			match hovering.1 {
 				Side::First => {
@@ -304,8 +303,7 @@ fn placing_system(
 	// If sprite exists, update it, otherwise create new sprite
 	if let (Some(mut sprite), Some(mut transform)) = (sprite, transform) {
 		*sprite = data.gen_sprite(expr);
-		transform.translation.x = data.location.x;
-		transform.translation.y = data.location.y;
+		*transform = data.gen_transform(state.placing_index);
 	} else {
 		commands.entity(entity).insert_bundle(SpriteBundle {
 			sprite: data.gen_sprite(expr),
