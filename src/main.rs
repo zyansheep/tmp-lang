@@ -117,6 +117,13 @@ impl ObjectData {
 			..default()
 		}
 	}
+
+	fn size(&self) -> Vec2 {
+		match self.orientation {
+			Orientation::Horizontal => Vec2::new(self.size, self.size * FRAC_1_SQRT_2),
+			Orientation::Vertical => Vec2::new(self.size * FRAC_1_SQRT_2, self.size),
+		}
+	}
 }
 
 #[derive(Bundle, Default)]
@@ -208,12 +215,50 @@ fn placing_system(
 	state: ResMut<GameState>,
 	mut app_state: ResMut<State<AppState>>,
 	mut placing: Query<(Entity, &mut ObjectData), With<Placing>>,
+	other_objects: Query<(Entity, &ObjectData), Without<Placing>>,
 ) {
 	let (entity, mut data) = placing.iter_mut().next().unwrap();
 	data.location = Vec2::new(mouse_pos.x, mouse_pos.y);
 	data.orientation = state.placing_orientation;
 
 	if mouse.just_pressed(MouseButton::Left) {
+		let width = data.size()[0];
+		let height = data.size()[1];
+
+		for (_, obj_data) in other_objects.iter() {
+			let obj_width = obj_data.size()[0];
+			let obj_height = obj_data.size()[1];
+
+			if data.location.distance(obj_data.location) <= 45.0 {
+				if obj_data.location.x - (obj_width / 2.0) >= data.location.x + (width / 2.0) {
+					info!("close to left edge");
+					data.location.x = obj_data.location.x - (obj_width / 2.0) - (width / 2.0);
+					data.location.y = obj_data.location.y;
+					break;
+				} else if obj_data.location.x + (obj_width / 2.0) <= data.location.x - (width / 2.0)
+				{
+					info!("close to right edge");
+					data.location.x = obj_data.location.x + (obj_width / 2.0) + (width / 2.0);
+					data.location.y = obj_data.location.y;
+					break;
+				} else if obj_data.location.y - (obj_height / 2.0)
+					>= data.location.y + (height / 2.0)
+				{
+					info!("close to bottom edge");
+					data.location.x = obj_data.location.x;
+					data.location.y = obj_data.location.y + (obj_height / 2.0) + (height / 2.0);
+					break;
+				} else if obj_data.location.y + (obj_height / 2.0)
+					<= data.location.y - (height / 2.0)
+				{
+					info!("close to top edge");
+					data.location.x = obj_data.location.x;
+					data.location.y = obj_data.location.y - (obj_height / 2.0) - (height / 2.0);
+					break;
+				}
+			}
+		}
+
 		commands.entity(entity).remove::<Placing>();
 		app_state.set(AppState::Default).unwrap();
 	}
