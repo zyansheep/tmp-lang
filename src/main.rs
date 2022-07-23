@@ -28,10 +28,11 @@ fn main() {
 		.add_plugin(MousePosPlugin::SingleCamera)
 		.add_startup_system(setup)
 		.add_state(AppState::Default)
-		.add_system_set(SystemSet::on_update(AppState::Default).with_system(mouseover_system).with_system(keyboard_input_system))
+		.add_system_set(SystemSet::on_update(AppState::Default).with_system(keyboard_input_system))
 		.add_system_set(SystemSet::on_update(AppState::PlacingObject).with_system(placing_system))
 		// .add_system(keyboard_input_system)
 		.add_system(object_system)
+    	.add_system(mouseover_system.before(object_system))
 		.init_resource::<GameState>()
 		.run();
 }
@@ -44,38 +45,52 @@ fn setup(mut commands: Commands) {
 
 #[derive(Default)]
 struct GameState {
-	hovering: Option<Entity>,
 	placing_orientation: Orientation,
-	placing_size: f32,
+	placing_index: f32,
+	hovering: Option<Entity>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum Side { First, Second }
+#[derive(Component, Debug, PartialEq, Eq)]
+struct Hovering(u32, Side);
+impl PartialOrd for Hovering {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> { self.0.partial_cmp(&other.0) }
+}
+impl Ord for Hovering {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering { self.0.cmp(&other.0) }
 }
 
 fn mouseover_system(
-	mouse: Res<MousePosWorld>,
-	mut state: ResMut<GameState>,
-	objects: Query<(Entity, &Sprite, &Transform), With<ObjectData>>,
+	mut commands: Commands,
+	mouse: Query<&MousePosWorld, Changed<MousePosWorld>>,
+	objects: Query<(Entity, &ObjectData), Without<Placing>>,
 ) {
-	let old_state = state.hovering;
-	let mut found_hover = false;
-	for (entity, sprite, transform) in objects.iter() {
-		if let Some(size) = sprite.custom_size {
+	if let Ok(mouse) = mouse.get_single() {
+		// info!("Mouse Coords: {}", mouse);
+		let mut hover_index = 0;
+		for (entity, data) in objects.iter() {
+			let loc = data.location;
+			let size = data.size();
 			let hw = size.x / 2.0;
 			let hh = size.y / 2.0;
-			if mouse.x > transform.translation.x - hw
-				&& mouse.y > transform.translation.y - hh
-				&& mouse.x < transform.translation.x + hw
-				&& mouse.y < transform.translation.y + hh
+			
+			if mouse.x > loc.x - hw
+				&& mouse.y > loc.y - hh
+				&& mouse.x < loc.x + hw
+				&& mouse.y < loc.y + hh
 			{
-				state.hovering = Some(entity);
-				found_hover = true;
+				let side = match data.orientation {
+					Orientation::Horizontal if mouse.x < loc.x => Side::First,
+					Orientation::Vertical if mouse.y < loc.y => Side::First,
+					_ => Side::Second
+				};
+				commands.entity(entity).insert(Hovering(hover_index, side));
+				hover_index += 1;
+			} else {
+				commands.entity(entity).remove::<Hovering>();
 			}
 		}
-	}
-	if !found_hover {
-		state.hovering = None
-	}
-
-	if state.hovering != old_state {
-		info!("Hovering: {:?}", state.hovering);
 	}
 }
 
@@ -103,17 +118,23 @@ struct ObjectData {
 }
 
 impl ObjectData {
+	fn gen_color(&self, expr: &Expr, hovering: bool) -> Color {
+		let color = match expr {
+			Expr::Function { .. } => Color::BLUE,
+			Expr::Application { .. } => Color::GRAY,
+			Expr::Variable => Color::RED,
+		};
+		if !hovering { color } else {
+			color + Color::rgb_u8(100, 100, 100)
+		}
+	}
 	fn gen_sprite(&self, expr: &Expr) -> Sprite {
 		Sprite {
 			custom_size: Some(match self.orientation {
 				Orientation::Horizontal => Vec2::new(self.size, self.size * FRAC_1_SQRT_2),
 				Orientation::Vertical => Vec2::new(self.size * FRAC_1_SQRT_2, self.size),
 			}),
-			color: match expr {
-				Expr::Function { .. } => Color::BLUE,
-				Expr::Application { .. } => Color::GRAY,
-				Expr::Variable => Color::RED,
-			},
+			color: self.gen_color(expr, false),
 			..default()
 		}
 	}
@@ -153,37 +174,50 @@ fn keyboard_input_system(
 			..default()
 		});
 		app_state.set(AppState::PlacingObject).unwrap();
+		state.placing_index += 1.0;
 	} else if keyboard_input.just_pressed(KeyCode::V) {
 		info!("Placing Variable Block");
 		commands.spawn_bundle(Object::default());
 		app_state.set(AppState::PlacingObject).unwrap();
+		state.placing_index += 1.0;
+	} else if keyboard_input.just_pressed(KeyCode::A) {
+		info!("Placing Application Block");
+		commands.spawn_bundle(Object {
+			expr: Expr::Application { func: None, args: None },
+			..default()
+		});
+		app_state.set(AppState::PlacingObject).unwrap();
+		state.placing_index += 1.0;
+	} else if keyboard_input.just_pressed(KeyCode::D) {
+		info!("Deleting Block");
+		if let Some(entity) = state.hovering {
+			commands.entity(entity).despawn();
+		}
 	}
 }
 
 fn object_system(
-	mut commands: Commands,
-	state: ResMut<GameState>,
-	app_state: ResMut<State<AppState>>,
-	mut objects: Query<(Entity, &ObjectData, &Expr, &Sprite)>,
+	mut objects: Query<(Entity, &ObjectData, &Expr, &mut Sprite, Option<&Hovering>), Without<Placing>>,
+	mut state: ResMut<GameState>,
 ) {
-	/* for (entity, data, expr, sprite) in objects.iter_mut() {
-		if sprite.is_some() {
-			commands.entity(entity).remove_bundle::<SpriteBundle>();
+	let mut obj_iter = objects.iter_mut();
+	if let Some((mut entity, mut data, mut expr, mut sprite, mut hovering)) = obj_iter.next() {
+		// Find top hovered object
+		for (o_entity, o_data, o_expr, o_sprite, o_hovering) in obj_iter {
+			if hovering <= o_hovering {
+				entity = o_entity;
+				data = o_data;
+				sprite = o_sprite;
+				expr = o_expr;
+				hovering = o_hovering;
+			}
+			sprite.color = data.gen_color(expr, false)	
 		}
-
-		/* let data = if let AppState::PlacingObject = app_state.current() {
-			let mut data = (*data).clone();
-			data.orientation = state.placing_orientation;
-			data
-		} else {
-			(*data).clone()
-		}; */
-
-		commands.entity(entity).insert_bundle(SpriteBundle {
-			sprite: data.gen_sprite(expr),
-			transform: Transform::from_xyz(data.location.x, data.location.y, 0.0),
-			..default()
-		});
+		sprite.color = data.gen_color(expr, hovering.is_some());
+		state.hovering = Some(entity);
+	}
+	/* for (_entity, data, expr, mut sprite, hovering) in objects.iter_mut() {
+		sprite.color = data.gen_color(expr, hovering.is_some());
 	} */
 }
 
@@ -194,22 +228,58 @@ fn placing_system(
 	mut state: ResMut<GameState>,
 	mut app_state: ResMut<State<AppState>>,
 	mut placing: Query<(Entity, &mut ObjectData, &Expr, Option<&mut Sprite>, Option<&mut Transform>), With<Placing>>,
-	other_objects: Query<(Entity, &ObjectData), Without<Placing>>,
+	mut other_objects: Query<(Entity, &mut ObjectData, &Sprite, &Transform, Option<&Hovering>), Without<Placing>>,
 	keyboard_input: Res<Input<KeyCode>>,
 	camera_proj: Query<&OrthographicProjection, With<Camera>>,
 ) {
-	let (entity, mut data, expr, sprite, transform) = placing.iter_mut().next().unwrap();
+	let (entity, mut data, expr, sprite, transform) = placing.single_mut();
+	data.size = camera_proj.iter().next().unwrap().scale * 512.0;
 	data.location = Vec2::new(mouse_pos.x, mouse_pos.y);
 	data.orientation = state.placing_orientation;
-	data.size = camera_proj.iter().next().unwrap().scale * 128.0;
+
+	let mut obj_iter = other_objects.iter_mut();
+	if let Some((mut h_entity, mut h_data, mut h_sprite, mut h_transform, mut h_hovering)) = obj_iter.next() {
+		// Find top hovered object
+		for (o_entity, o_data, o_sprite, o_transform, o_hovering) in obj_iter {
+			if h_hovering < o_hovering {
+				h_entity = o_entity;
+				h_data = o_data;
+				h_sprite = o_sprite;
+				h_transform = o_transform;
+				h_hovering = o_hovering;
+			}
+		}
+		if let Some(hovering) = h_hovering {
+			// Check which side of top hovered block we need to place the block we are currently placing.
+			let size = (h_data.size * FRAC_1_SQRT_2) - (h_data.size / 10.0);
+			let mut orientation = h_data.orientation; orientation.swap();
+			data.orientation = orientation;
+			data.size = size;
+			let h_size = h_data.size();
+			let half_h_size_oriented = match h_data.orientation {
+				Orientation::Horizontal => Vec2::new(h_size.x / 4.0, 0.0),
+				Orientation::Vertical => Vec2::new(0.0, h_size.y / 4.0),
+			};
+			let half_h_size = h_data.size / 4.0;
+			match hovering.1 {
+				Side::First => {
+					data.location = h_data.location - half_h_size_oriented;
+				}
+				Side::Second => {
+					data.location = h_data.location + half_h_size_oriented;
+				}
+			}
+		}
+	}
 	// If sprite exists, update it, otherwise create new sprite
 	if let (Some(mut sprite), Some(mut transform)) = (sprite, transform) {
 		*sprite = data.gen_sprite(expr);
-		transform.translation = Vec3::new(data.location.x, data.location.y, 0.0);
+		transform.translation.x = data.location.x;
+		transform.translation.y = data.location.y;
 	} else {
 		commands.entity(entity).insert_bundle(SpriteBundle {
 			sprite: data.gen_sprite(expr),
-			transform: Transform::from_xyz(data.location.x, data.location.y, 0.0),
+			transform: Transform::from_xyz(data.location.x, data.location.y, state.placing_index),
 			..default()
 		});
 	}
@@ -221,45 +291,9 @@ fn placing_system(
 		commands.entity(entity).despawn();
 		app_state.set(AppState::Default).unwrap();
 	}
+
 	// Place block on Left Click
 	if mouse.just_pressed(MouseButton::Left) {
-		let width = data.size()[0];
-		let height = data.size()[1];
-
-		for (_, obj_data) in other_objects.iter() {
-			let obj_width = obj_data.size()[0];
-			let obj_height = obj_data.size()[1];
-
-			if data.location.distance(obj_data.location) <= 45.0 {
-				if obj_data.location.x - (obj_width / 2.0) >= data.location.x + (width / 2.0) {
-					info!("close to left edge");
-					data.location.x = obj_data.location.x - (obj_width / 2.0) - (width / 2.0);
-					data.location.y = obj_data.location.y;
-					break;
-				} else if obj_data.location.x + (obj_width / 2.0) <= data.location.x - (width / 2.0)
-				{
-					info!("close to right edge");
-					data.location.x = obj_data.location.x + (obj_width / 2.0) + (width / 2.0);
-					data.location.y = obj_data.location.y;
-					break;
-				} else if obj_data.location.y - (obj_height / 2.0)
-					>= data.location.y + (height / 2.0)
-				{
-					info!("close to bottom edge");
-					data.location.x = obj_data.location.x;
-					data.location.y = obj_data.location.y + (obj_height / 2.0) + (height / 2.0);
-					break;
-				} else if obj_data.location.y + (obj_height / 2.0)
-					<= data.location.y - (height / 2.0)
-				{
-					info!("close to top edge");
-					data.location.x = obj_data.location.x;
-					data.location.y = obj_data.location.y - (obj_height / 2.0) - (height / 2.0);
-					break;
-				}
-			}
-		}
-
 		commands.entity(entity).remove::<Placing>();
 		app_state.set(AppState::Default).unwrap();
 	}

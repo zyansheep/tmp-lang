@@ -9,7 +9,7 @@ pub enum Binding {
 #[derive(Component, Default)]
 pub enum Expr {
 	Function { bind: Binding, expr: Option<Entity> },
-	Application { func: Entity, args: Option<Entity> },
+	Application { func: Option<Entity>, args: Option<Entity> },
 	#[default]
 	Variable,
 }
