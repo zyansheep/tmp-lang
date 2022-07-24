@@ -39,6 +39,7 @@ fn main() {
     	.add_system_set(SystemSet::on_update(AppState::WiringObject).with_system(wiring_system))
 		.add_system(block::data_update).add_system(block::expr_update).add_system(block::hover_update)
 		.add_system(mouseover::mouseover_system)
+		.add_system(state_change)
 		// .add_system(ui::button_system)
     	.add_system(bevy::window::exit_on_window_close_system)
 		.init_resource::<GameState>()
@@ -52,11 +53,17 @@ fn setup(mut commands: Commands) {
 		.insert(PanCam { track_mouse: true, ..default() });
 }
 
+fn state_change(app_state: Res<State<AppState>>) {
+	if app_state.is_changed() {
+		info!("State changed: {:?}", app_state.current());
+	}
+}
+
 #[derive(Default)]
 pub struct GameState {
 	placing_orientation: Orientation,
 	placing_index: f32,
-	just_placed: bool,
+	just_pressed: bool,
 	update_placing_expr: Option<Expr>,
 }
 
@@ -90,7 +97,7 @@ fn input_system(
 				args: None,
 			},
 		);
-	} else if mouse_input.just_pressed(MouseButton::Left) {
+	} else if mouse_input.just_pressed(MouseButton::Left) && !state.just_pressed {
 		app_state.push(AppState::WiringObject).unwrap();
 	}
 }
@@ -106,6 +113,7 @@ fn wiring_system(
 	mut hover_set: Query<(Entity, &ObjectData, &HoverState), Changed<HoverState>>,
 	mut wiring_from: Local<Option<Entity>>,
 ) {
+	
 	/* if let Some(wiring_from) = wiring_from {
 		/* if let Expr::Function { bind, expr: Some(expr_entity) } = expr {
 			for (h_entity, h_data, h_hover_state) in hover_set.iter_mut() {

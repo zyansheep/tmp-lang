@@ -18,15 +18,15 @@ pub fn place_expr(
 ) {
 	match app_state.current() {
 		AppState::Default => {
-			state.just_placed = true; // Prevent a single mouse click
+			state.just_pressed = true; // Prevent a single mouse click
 			commands
 				.spawn_bundle(Object { expr, ..default() })
 				.insert(Placing);
-			app_state.set(AppState::PlacingObject).unwrap();
+			app_state.push(AppState::PlacingObject).unwrap();
 			state.placing_index += 1.0;
 		}
 		AppState::PlacingObject => {
-			state.just_placed = true; // Prevent a single mouse click
+			state.just_pressed = true; // Prevent a single mouse click
 			state.update_placing_expr = Some(expr);
 		}
 		_ => {},
@@ -47,8 +47,8 @@ pub fn placing_system(
 	camera_proj: Query<&OrthographicProjection, With<MainCamera>>,
 	asset_server: Res<AssetServer>,
 ) {
-	if state.just_placed {
-		state.just_placed = false;
+	if state.just_pressed {
+		state.just_pressed = false;
 		mouse.clear_just_pressed(MouseButton::Left);
 	}
 	// Fetch data on block-to-place
@@ -95,11 +95,12 @@ pub fn placing_system(
 
 				// Place block inside another block
 				if mouse.just_pressed(MouseButton::Left) {
+					state.just_pressed = true;
 					*expr_slot = Some(entity);
 					data.parent = Some(h_entity);
 					// commands.entity(h_entity).add_child(entity); // DONT DO THIS, YOUR LIFE WILL BE PAINNNN
 					commands.entity(entity).remove::<Placing>().insert(HoverState::No);
-					app_state.set(AppState::Default).unwrap();
+					app_state.pop().unwrap();
 					return;
 				}
 			}
@@ -108,8 +109,9 @@ pub fn placing_system(
 	}
 	// Place block on blank canvas (if there are no objects in scene)
 	if mouse.just_pressed(MouseButton::Left) && other_objects.is_empty() {
+		state.just_pressed = true;
 		commands.entity(entity).remove::<Placing>().insert(HoverState::No);
-		app_state.set(AppState::Default).unwrap();
+		app_state.pop().unwrap();
 	}
 	
 	// Generate / Update visuals from Object data
@@ -129,7 +131,7 @@ pub fn placing_system(
 	// Press Escape to stop placing block
 	if keyboard_input.just_pressed(KeyCode::Escape) {
 		commands.entity(entity).despawn();
-		app_state.set(AppState::Default).unwrap();
+		app_state.pop().unwrap();
 	}
 	// Change placing Expr variant
 	if keyboard_input.just_pressed(KeyCode::A) {

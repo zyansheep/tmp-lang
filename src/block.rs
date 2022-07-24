@@ -4,7 +4,7 @@ use std::f32::consts::{FRAC_1_SQRT_2, FRAC_PI_2, PI};
 
 use bevy::prelude::*;
 
-use crate::{GameState, mouseover::{HoverState}, placing::Placing};
+use crate::{mouseover::{HoverState}, placing::Placing};
 
 pub enum Binding {
 	None,
@@ -102,7 +102,6 @@ pub fn hover_update(
 		(&HoverState, &mut Sprite),
 		(Changed<HoverState>, Without<Placing>),
 	>,
-	state: ResMut<GameState>,
 ) {
 	for (state, mut sprite) in objects.iter_mut() {
 		sprite.color = ObjectData::gen_color(state.is_top());
