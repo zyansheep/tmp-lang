@@ -1,7 +1,8 @@
 use bevy::prelude::*;
 // use bevy_mod_picking::{DebugEventsPickingPlugin, DefaultPickingPlugins, PickableBundle, PickingCameraBundle, PickingEvent};
-use bevy_mouse_tracking_plugin::{MainCamera, MousePosPlugin};
+use bevy_mouse_tracking_plugin::{MainCamera, MousePosPlugin, MousePosWorld};
 use bevy_pancam::{PanCam, PanCamPlugin};
+use bevy_prototype_lyon::prelude::*;
 use block::{ObjectData, Orientation, WrappedExpr};
 use block_to_expr::block_to_expr;
 use expr::{Binding, Expr};
@@ -34,6 +35,7 @@ fn main() {
 		.add_plugins(DefaultPlugins)
 		.add_plugin(PanCamPlugin::default())
 		.add_plugin(MousePosPlugin::SingleCamera)
+		.add_plugin(ShapePlugin)
 		.add_startup_system(setup)
 		.add_startup_system(ui::ui_setup)
 		.add_state(AppState::Default)
@@ -41,8 +43,7 @@ fn main() {
 
 		.add_system_set(SystemSet::on_update(AppState::PlacingObject).with_system(placing::placing_system))
 
-    	.add_system_set(SystemSet::on_update(AppState::WiringObject).with_system(wiring_system))
-		.add_event::<WireFromUpdate>()
+		.add_system_set(SystemSet::on_update(AppState::WiringObject).with_system(wiring_system).with_system(connecting_system))
 
 		.add_system(block::data_update).add_system(block::expr_update).add_system(block::hover_update)
 		.add_system(mouseover::mouseover_system)
@@ -128,13 +129,17 @@ fn input_system(
 fn block_input(
 	mut commands: Commands,
 	mut keyboard_input: ResMut<Input<KeyCode>>,
-	objects: Query<(Entity, &HoverState, Option<&TopHover>, Option<&BottomHover>)>,
+	objects: Query<(Entity, &ObjectData, &WrappedExpr, &HoverState, Option<&TopHover>, Option<&BottomHover>)>,
+	mut app_state: ResMut<State<AppState>>,
 ) {
-	for (entity, state, top, bottom) in objects.iter() {
+	for (entity, data, expr, state, top, bottom) in objects.iter() {
 		match (state, top, bottom) {
 			(HoverState::Yes { .. }, Some(_), None) => {
 				if keyboard_input.clear_just_pressed(KeyCode::C) {
-					commands.entity(entity).insert(WireFrom);
+					if let Some(port) = match expr { WrappedExpr::Lambda { .. } => Some(PortType::Lambda), WrappedExpr::Variable { .. } => Some(PortType::Variable), _ => None } {
+						commands.spawn().insert(Wire { from: entity, start: data.location, end: Vec2::ZERO, port }).insert(ActiveWire);
+						app_state.push(AppState::WiringObject).unwrap();
+					}
 				}
 			}
 			(HoverState::Yes { .. }, None, Some(_)) => {
@@ -143,14 +148,11 @@ fn block_input(
 			(HoverState::Yes { .. }, Some(_), Some(_)) => {}
 			(HoverState::Yes { .. }, None, None) => {}
 			(HoverState::No, None, None) => {}
-			_ => { panic!("Invalid Hover component configuration: {entity:?}, {state:?}, {top:?}, {bottom:?}") }
+			_ => { /* panic!("Invalid Hover component configuration: {entity:?}, {state:?}, {top:?}, {bottom:?}") */ }
 		}
 	}
 }
 
-#[derive(Component, Debug, Clone, Copy)]
-struct WireFrom;
-struct WireFromUpdate(Entity);
 
 // Component that travels from Variable to Lambda and once it gets there, it changes the state.
 #[derive(Component)]
@@ -158,25 +160,89 @@ struct WireFinder {
 	bind: Binding<'static>,
 }
 
+#[derive(Debug, Clone, Copy)]
+enum PortType {
+	Lambda,
+	Variable,
+}
+impl PortType {
+	pub fn swap(self) -> Self {
+		match self { Self::Lambda => Self::Variable, Self::Variable => Self::Lambda }
+	}
+}
+
+#[derive(Component)]
+struct Wire {
+	from: Entity,
+	port: PortType,
+	start: Vec2,
+	end: Vec2,
+}
+#[derive(Component, Debug, Clone, Copy)]
+struct ActiveWire;
+
+#[derive(Component, Debug, Clone)]
+struct FormConnection(Entity, PortType);
+
+fn connecting_system(
+	mut commands: Commands,
+	mut objects: Query<(Entity, &mut ObjectData, &mut WrappedExpr, &FormConnection)>
+) {
+	for (entity, data, mut expr, conn) in objects.iter_mut() {
+		match (&mut *expr, conn.1) {
+			(WrappedExpr::Variable { bound }, PortType::Variable) => *bound = Some(conn.0),
+			(WrappedExpr::Lambda { bind_entity, .. }, PortType::Lambda) => *bind_entity = Some(conn.0),
+			_ => { error!("Invalid connection") }
+		}
+		commands.entity(entity).remove::<FormConnection>();
+	}
+}
+
 // System for wiring things up
 fn wiring_system(
 	mut commands: Commands,
 	mut app_state: ResMut<State<AppState>>,
 	mut state: ResMut<GameState>,
-	mut top_hover: Query<(Entity, &ObjectData, &HoverState), With<TopHover>>,
-	mut wiring_from: Query<Entity, With<WireFrom>>,
+	mut top_hover: Query<(Entity, &ObjectData, &WrappedExpr, &HoverState), With<TopHover>>,
 	mut mouse: ResMut<Input<MouseButton>>,
 	mut keyboard: ResMut<Input<KeyCode>>,
+	mut wire: Query<(Entity, &mut Wire, Option<&mut Path>), With<ActiveWire>>,
+	mouse_pos: Res<MousePosWorld>,
 ) {
-	if let Ok(wiring_from) = wiring_from.get_single_mut() {
-		if let Ok((entity, data, state)) = top_hover.get_single_mut() {
+	if let Ok((entity, mut wire, mut path)) = wire.get_single_mut() {
+		wire.end = Vec2::new(mouse_pos.x, mouse_pos.y);
+		if let Ok((entity, data, expr, state)) = top_hover.get_single_mut() {
 			if mouse.clear_just_pressed(MouseButton::Left) {
-				commands.entity(entity).insert(WireFinder { bind: Binding::End });
+				match (expr, wire.port) {
+					(WrappedExpr::Variable { .. }, PortType::Lambda) |
+					(WrappedExpr::Lambda { .. }, PortType::Variable) => {
+						commands.entity(wire.from).insert(FormConnection(entity, wire.port));
+						commands.entity(entity).insert(FormConnection(wire.from, wire.port.swap()));
+						wire.end = data.location;
+						app_state.pop().unwrap();
+					}
+					_ => {},
+				}
 			}
 		}
 		if keyboard.clear_just_pressed(KeyCode::Escape) {
-			commands.entity(wiring_from).remove::<WireFrom>();
+			commands.entity(entity).despawn();
 			app_state.pop().unwrap();
+		}
+
+		// Build line
+		let mut path_builder = PathBuilder::new();
+		path_builder.move_to(wire.start);
+		path_builder.line_to(wire.end);
+		let line = path_builder.build();
+		if let Some(path) = &mut path {
+			**path = line;
+		} else {
+			commands.spawn().insert_bundle(GeometryBuilder::build_as(
+				&line,
+				DrawMode::Stroke(StrokeMode::new(Color::BLACK, 10.0)),
+				Transform::from_xyz(0.0, 0.0, 1000.0),
+			));
 		}
 	}
 }

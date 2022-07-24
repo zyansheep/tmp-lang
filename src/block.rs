@@ -24,6 +24,7 @@ pub enum Expr {
 pub enum WrappedExpr {
 	Variable { bound: Option<Entity> },
 	Lambda {
+		bind_entity: Option<Entity>,
 		expr_entity: Option<Entity>,
 		formed: Option<Expr<'static>>,
 	},
@@ -35,7 +36,7 @@ pub enum WrappedExpr {
 }
 impl WrappedExpr {
 	pub const APPLICATION: WrappedExpr = WrappedExpr::Application { func_entity: None, args_entity: None, formed: None };
-	pub const LAMBDA: WrappedExpr = WrappedExpr::Lambda { expr_entity: None, formed: None };
+	pub const LAMBDA: WrappedExpr = WrappedExpr::Lambda { bind_entity: None, expr_entity: None, formed: None };
 	pub const VARIABLE: WrappedExpr = WrappedExpr::Variable { bound: None };
 }
 impl Default for WrappedExpr { fn default() -> Self { Self::VARIABLE } }
@@ -81,8 +82,8 @@ impl ObjectData {
 		match expr {
 			WrappedExpr::Variable { .. } => asset_server.load("VariableDot.png"),
 			WrappedExpr::Variable { bound: Some(_) } => asset_server.load("VariableBound.png"),
-			WrappedExpr::Lambda { expr_entity: None, formed: None } => asset_server.load("Lambda.png"),
-			WrappedExpr::Lambda { expr_entity: Some(_), formed: None } => asset_server.load("LambdaEmpty.png"),
+			WrappedExpr::Lambda { expr_entity: None, formed: None, .. } => asset_server.load("Lambda.png"),
+			WrappedExpr::Lambda { expr_entity: Some(_), formed: None, .. } => asset_server.load("LambdaEmpty.png"),
 			WrappedExpr::Lambda { formed: Some(_), .. } => asset_server.load("LambdaDot.png"),
 			WrappedExpr::Application { .. } => asset_server.load("Application.png"),
 		}
