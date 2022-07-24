@@ -3,6 +3,7 @@ use bevy::prelude::*;
 use bevy_mouse_tracking_plugin::{MainCamera, MousePosPlugin};
 use bevy_pancam::{PanCam, PanCamPlugin};
 use block::{ObjectData, Orientation, WrappedExpr};
+use block_to_expr::block_to_expr;
 use expr::Binding;
 use mouseover::{BottomHover, HoverState, TopHover};
 use placing::place_expr;
@@ -14,6 +15,7 @@ mod block;
 mod placing;
 mod parse;
 mod ui;
+mod block_to_expr;
 
 const IMAGE_SIZE: f32 = 300.0;
 
@@ -77,6 +79,8 @@ fn input_system(
 	mut app_state: ResMut<State<AppState>>,
 	keyboard_input: Res<Input<KeyCode>>,
 	mut mouse_input: ResMut<Input<MouseButton>>,
+	mut other_objects: Query<(Entity, &mut ObjectData, &mut block::WrappedExpr, &HoverState)>,
+	mut expr_text: Query<&mut Text, With<ui::TextThatShouldBeChangedToExpression>>
 ) {
 	if keyboard_input.just_pressed(KeyCode::F) {
 		place_expr(commands, &mut app_state, &mut state, WrappedExpr::LAMBDA);
@@ -84,6 +88,17 @@ fn input_system(
 		place_expr(commands, &mut app_state, &mut state, WrappedExpr::VARIABLE);
 	} else if keyboard_input.just_pressed(KeyCode::A) {
 		place_expr(commands, &mut app_state, &mut state, WrappedExpr::APPLICATION);
+	} else if keyboard_input.just_pressed(KeyCode::C) {
+		for (h_entity, mut h_data, mut h_expr, h_hover_state) in other_objects.iter_mut() {
+			// if let HoverState::Yes { side, .. } = h_hover_state {
+			// 	let text = expr_text.iter().next().unwrap();
+			//   text.sections[1].value = match block_to_expr(&h_expr) {
+			// 		Ok(expr) => format!("{}", &expr),
+			// 		Err(_) => "malformed expression".into(),
+			// 	};
+			//   break
+			// }
+		  }
 	} /* else if mouse_input.clear_just_pressed(MouseButton::Left) {
 		app_state.push(AppState::WiringObject).unwrap();
 	} */
