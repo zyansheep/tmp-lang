@@ -1,4 +1,4 @@
-use std::f32::consts::{FRAC_1_SQRT_2, FRAC_PI_2};
+use std::f32::consts::{FRAC_1_SQRT_2, FRAC_PI_2, PI};
 
 use bevy::prelude::*;
 
@@ -39,6 +39,7 @@ pub struct ObjectData {
 	pub location: Vec2,
 	pub size: f32, // Size of longer side
 	pub parent: Option<Entity>,
+	pub flip: bool,
 }
 
 impl ObjectData {
@@ -73,10 +74,7 @@ impl ObjectData {
 		let scale = self.size / crate::IMAGE_SIZE;
 		Transform {
 			translation: Vec3::new(self.location.x, self.location.y, z_loc),
-			rotation: match self.orientation {
-				Orientation::Horizontal => Quat::IDENTITY,
-				Orientation::Vertical => Quat::from_rotation_z(FRAC_PI_2),
-			},
+			rotation: Quat::from_rotation_z(if self.flip { PI } else { 0.0 } + if let Orientation::Vertical = self.orientation { FRAC_PI_2 } else { 0.0 }),
 			scale: Vec3::new(scale, scale, 1.0),
 		}
 	}

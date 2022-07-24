@@ -164,11 +164,15 @@ fn placing_system(
 	data.location = Vec2::new(mouse_pos.x, mouse_pos.y); // Move block-to-place to mouse cursor
 	data.orientation = state.placing_orientation; // Set orientation based on game state
 
-	for (h_entity, h_data, mut h_expr, h_hovering) in other_objects.iter_mut() {
+	for (h_entity, mut h_data, mut h_expr, h_hovering) in other_objects.iter_mut() {
 		if state.top_hovering == Some(h_entity) {
 			// Make sure we can place block
 			if let Some((side, expr_slot)) = match (&mut *h_expr, h_hovering.side) {
-				(Expr::Function { bind: _, expr }, side) if expr.is_none() => Some((side, expr)),
+				(Expr::Function { bind: _, expr }, Side::First) if expr.is_none() => {
+					h_data.flip = true; // Make sure the dot is on the right side of the Function block texture
+					Some((Side::First, expr))
+				},
+				(Expr::Function { bind: _, expr }, Side::Second) if expr.is_none() => Some((Side::Second, expr)),
 				(Expr::Application { func, args: _ }, Side::First) if func.is_none() => {
 					Some((Side::First, func))
 				}
