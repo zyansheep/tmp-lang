@@ -1,8 +1,9 @@
 use bevy::{prelude::*, ui::FocusPolicy};
+use hashdb::LinkArena;
 
 use crate::{
 	block::{Binding, Expr},
-	place_expr, AppState, GameState,
+	place_expr, AppState, GameState, mouseover::HoverState,
 };
 
 pub fn ui_setup(mut commands: Commands, asset_server: Res<AssetServer>) {
@@ -104,9 +105,39 @@ pub fn ui_setup(mut commands: Commands, asset_server: Res<AssetServer>) {
 							info!("Added application");
 						},
 					);
+
+					parent.spawn_bundle(TextBundle {
+						style: Style {
+							size: Size::new(Val::Px(100.), Val::Px(70.)),
+							margin: Rect {
+								left: Val::Auto,
+								right: Val::Auto,
+								top: Val::Px(10.),
+								..default()
+							},
+							..default()
+						},
+						text: Text::with_section(
+							format!("{}", &crate::expr::Expr::Variable),
+							TextStyle {
+								font: asset_server.load("fonts/SourceCodePro.ttf"),
+								font_size: 16.,
+								color: Color::WHITE,
+							},
+							TextAlignment {
+								horizontal: HorizontalAlign::Center,
+								vertical: VerticalAlign::Top,
+							},
+							
+						),
+						..default()
+					}).insert(TextThatShouldBeChangedToExpression{});
 				});
 		});
 }
+
+#[derive(Component)]
+pub struct TextThatShouldBeChangedToExpression;
 
 fn build_button(
 	parent: &mut ChildBuilder,
@@ -123,6 +154,10 @@ fn build_button(
 					top: Val::Px(20.),
 					..default()
 				},
+				size: Size {
+					width: Val::Px(240.),
+					height: Val::Px(170.),
+				},
 				justify_content: JustifyContent::Center,
 				align_items: AlignItems::Center,
 				..default()
@@ -134,6 +169,13 @@ fn build_button(
 		.with_children(|parent| {
 			parent.spawn_bundle(ImageBundle {
 				image: image.into(),
+				style: Style {
+					size: Size {
+						width: Val::Px(220.),
+						height: Val::Px(150.),
+					},
+					..default()
+				},
 				..default()
 			});
 		})
