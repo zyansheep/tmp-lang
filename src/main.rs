@@ -46,7 +46,7 @@ fn setup(mut commands: Commands) {
 	commands
 		.spawn_bundle(OrthographicCameraBundle::new_2d())
 		.insert(MainCamera)
-		.insert(PanCam::default());
+		.insert(PanCam { track_mouse: true, ..default() });
 }
 
 #[derive(Default)]
