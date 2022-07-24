@@ -1,0 +1,3 @@
+[submodule "vendor/bevy-mouse-tracking"]
+	path = vendor/bevy-mouse-tracking
+	url = https://github.com/JoJoJet/bevy-mouse-tracking

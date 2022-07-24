@@ -528,7 +528,6 @@ dependencies = [
 [[package]]
 name = "bevy_mouse_tracking_plugin"
 version = "0.2.1"
-source = "git+https://github.com/JoJoJet/bevy-mouse-tracking#d19a814a23c4ab8c9925e856a62e92f8c6f0806d"
 dependencies = [
  "bevy",
 ]
