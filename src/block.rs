@@ -4,9 +4,9 @@ use std::f32::consts::{FRAC_1_SQRT_2, FRAC_PI_2, PI};
 
 use bevy::prelude::*;
 
-use crate::{mouseover::{HoverState, TopHover}, placing::Placing};
+use crate::{expr::{Binding, Expr}, mouseover::{HoverState, TopHover}, placing::Placing};
 
-pub enum Binding {
+/* pub enum Binding {
 	None,
 	End,
 	Branch(Box<Binding>, Box<Binding>)
@@ -18,7 +18,27 @@ pub enum Expr {
 	Application { func: Option<Entity>, args: Option<Entity> },
 	#[default]
 	Variable,
+} */
+
+#[derive(Component, Clone)]
+pub enum WrappedExpr {
+	Variable { bound: Option<Entity> },
+	Lambda {
+		expr_entity: Option<Entity>,
+		formed: Option<Expr<'static>>,
+	},
+	Application {
+		func_entity: Option<Entity>,
+		args_entity: Option<Entity>,
+		formed: Option<Expr<'static>>,
+	}
 }
+impl WrappedExpr {
+	pub const APPLICATION: WrappedExpr = WrappedExpr::Application { func_entity: None, args_entity: None, formed: None };
+	pub const LAMBDA: WrappedExpr = WrappedExpr::Lambda { expr_entity: None, formed: None };
+	pub const VARIABLE: WrappedExpr = WrappedExpr::Variable { bound: None };
+}
+impl Default for WrappedExpr { fn default() -> Self { Self::VARIABLE } }
 
 
 #[derive(Default, Clone, Copy)]
@@ -57,12 +77,14 @@ impl ObjectData {
 			..default()
 		}
 	}
-	pub fn gen_texture(expr: &Expr, asset_server: &AssetServer) -> Handle<Image> {
+	pub fn gen_texture(expr: &WrappedExpr, asset_server: &AssetServer) -> Handle<Image> {
 		match expr {
-			Expr::Variable => asset_server.load("VariableDot.png"),
-			Expr::Function { bind: Binding::None, expr: None } => asset_server.load("Lambda.png"),
-			Expr::Function { .. } => asset_server.load("LambdaDot.png"),
-			Expr::Application { .. } => asset_server.load("Application.png"),
+			WrappedExpr::Variable { .. } => asset_server.load("VariableDot.png"),
+			WrappedExpr::Variable { bound: Some(_) } => asset_server.load("VariableBound.png"),
+			WrappedExpr::Lambda { expr_entity: None, formed: None } => asset_server.load("Lambda.png"),
+			WrappedExpr::Lambda { expr_entity: Some(_), formed: None } => asset_server.load("LambdaEmpty.png"),
+			WrappedExpr::Lambda { formed: Some(_), .. } => asset_server.load("LambdaDot.png"),
+			WrappedExpr::Application { .. } => asset_server.load("Application.png"),
 		}
 	}
 	pub fn gen_transform(&self, z_loc: f32) -> Transform {
@@ -82,7 +104,7 @@ impl ObjectData {
 #[derive(Bundle, Default)]
 pub struct Object {
 	pub data: ObjectData,
-	pub expr: Expr,
+	pub expr: WrappedExpr,
 }
 
 pub fn data_update(mut objects: Query<(&ObjectData, &mut Transform), Changed<ObjectData>>) {
@@ -91,7 +113,7 @@ pub fn data_update(mut objects: Query<(&ObjectData, &mut Transform), Changed<Obj
 		*transform = data.gen_transform(index);
 	}
 }
-pub fn expr_update(mut objects: Query<(&Expr, &mut Handle<Image>), Changed<Expr>>, asset_server: Res<AssetServer>) {
+pub fn expr_update(mut objects: Query<(&WrappedExpr, &mut Handle<Image>), Changed<WrappedExpr>>, asset_server: Res<AssetServer>) {
 	for (expr, mut image) in objects.iter_mut() {
 		*image = ObjectData::gen_texture(&expr, &asset_server);
 	}

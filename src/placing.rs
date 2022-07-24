@@ -5,7 +5,7 @@ use std::f32::consts::FRAC_1_SQRT_2;
 use bevy::prelude::*;
 use bevy_mouse_tracking_plugin::{MainCamera, MousePosWorld};
 
-use crate::{AppState, GameState, block::{Binding, Expr, Object, ObjectData, Orientation}, mouseover::{HoverState, Side, TopHover}};
+use crate::{AppState, GameState, block::{WrappedExpr, Object, ObjectData, Orientation}, mouseover::{HoverState, Side, TopHover}};
 
 #[derive(Component, Default, Clone)]
 pub struct Placing;
@@ -14,7 +14,7 @@ pub fn place_expr(
 	mut commands: Commands,
 	app_state: &mut State<AppState>,
 	state: &mut GameState,
-	expr: Expr,
+	expr: WrappedExpr,
 ) {
 	match app_state.current() {
 		AppState::Default => {
@@ -41,8 +41,8 @@ pub fn placing_system(
 	mouse_pos: Res<MousePosWorld>,
 	mut state: ResMut<GameState>,
 	mut app_state: ResMut<State<AppState>>,
-	mut placing: Query<(Entity, &mut ObjectData, &mut Expr, Option<&mut Sprite>), With<Placing>>,
-	mut top_hover: Query<(Entity, &mut ObjectData, &mut Expr, &HoverState), (Without<Placing>, With<TopHover>)>,
+	mut placing: Query<(Entity, &mut ObjectData, &mut WrappedExpr, Option<&mut Sprite>), With<Placing>>,
+	mut top_hover: Query<(Entity, &mut ObjectData, &mut WrappedExpr, &HoverState), (Without<Placing>, With<TopHover>)>,
 	keyboard_input: Res<Input<KeyCode>>,
 	camera_proj: Query<&OrthographicProjection, With<MainCamera>>,
 	asset_server: Res<AssetServer>,
@@ -61,16 +61,16 @@ pub fn placing_system(
 	if let Ok((h_entity, mut h_data, mut h_expr, HoverState::Yes { side, .. })) = top_hover.get_single_mut() {
 		// Make sure we can place block
 		if let Some((side, expr_slot)) = match (&mut *h_expr, side) {
-			(Expr::Function { bind: _, expr }, Side::First) if expr.is_none() => {
+			(WrappedExpr::Lambda { expr_entity, .. }, Side::First) if expr_entity.is_none() => {
 				h_data.flip = true; // Make sure the dot is on the right side of the Function block texture
-				Some((Side::First, expr))
+				Some((Side::First, expr_entity))
 			},
-			(Expr::Function { bind: _, expr }, Side::Second) if expr.is_none() => Some((Side::Second, expr)),
-			(Expr::Application { func, args: _ }, Side::First) if func.is_none() => {
-				Some((Side::First, func))
+			(WrappedExpr::Lambda { expr_entity, .. }, Side::Second) if expr_entity.is_none() => Some((Side::Second, expr_entity)),
+			(WrappedExpr::Application { func_entity, .. }, Side::First) if func_entity.is_none() => {
+				Some((Side::First, func_entity))
 			}
-			(Expr::Application { func: _, args }, Side::Second) if args.is_none() => {
-				Some((Side::Second, args))
+			(WrappedExpr::Application { args_entity, .. }, Side::Second) if args_entity.is_none() => {
+				Some((Side::Second, args_entity))
 			}
 			(_, _) => None,
 		} {
@@ -130,14 +130,14 @@ pub fn placing_system(
 		commands.entity(entity).despawn();
 		app_state.pop().unwrap();
 	}
-	// Change placing Expr variant
+	// Change placing WrappedExpr variant
 	if keyboard_input.just_pressed(KeyCode::A) {
-		*expr = Expr::Application { func: None, args: None };
+		*expr = WrappedExpr::APPLICATION;
 	}
 	if keyboard_input.just_pressed(KeyCode::F) {
-		*expr = Expr::Function { bind: Binding::None, expr: None };
+		*expr = WrappedExpr::LAMBDA;
 	}
 	if keyboard_input.just_pressed(KeyCode::V) {
-		*expr = Expr::Variable;
+		*expr = WrappedExpr::VARIABLE;
 	}
 }

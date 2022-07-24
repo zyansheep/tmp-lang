@@ -1,8 +1,9 @@
-use bevy::{input::keyboard::KeyboardInput, prelude::*};
+use bevy::prelude::*;
 // use bevy_mod_picking::{DebugEventsPickingPlugin, DefaultPickingPlugins, PickableBundle, PickingCameraBundle, PickingEvent};
 use bevy_mouse_tracking_plugin::{MainCamera, MousePosPlugin};
 use bevy_pancam::{PanCam, PanCamPlugin};
-use block::{ObjectData, Orientation};
+use block::{ObjectData, Orientation, WrappedExpr};
+use expr::Binding;
 use mouseover::{BottomHover, HoverState, TopHover};
 use placing::place_expr;
 
@@ -13,8 +14,6 @@ mod block;
 mod placing;
 mod parse;
 mod ui;
-
-use crate::block::{Binding, Expr};
 
 const IMAGE_SIZE: f32 = 300.0;
 
@@ -67,7 +66,7 @@ fn setup(mut commands: Commands) {
 pub struct GameState {
 	placing_orientation: Orientation,
 	placing_index: f32,
-	update_placing_expr: Option<Expr>,
+	update_placing_expr: Option<WrappedExpr>,
 	just_pressed: bool,
 }
 
@@ -80,27 +79,11 @@ fn input_system(
 	mut mouse_input: ResMut<Input<MouseButton>>,
 ) {
 	if keyboard_input.just_pressed(KeyCode::F) {
-		place_expr(
-			commands,
-			&mut app_state,
-			&mut state,
-			Expr::Function {
-				bind: Binding::None,
-				expr: None,
-			},
-		);
+		place_expr(commands, &mut app_state, &mut state, WrappedExpr::LAMBDA);
 	} else if keyboard_input.just_pressed(KeyCode::V) {
-		place_expr(commands, &mut app_state, &mut state, Expr::Variable);
+		place_expr(commands, &mut app_state, &mut state, WrappedExpr::VARIABLE);
 	} else if keyboard_input.just_pressed(KeyCode::A) {
-		place_expr(
-			commands,
-			&mut app_state,
-			&mut state,
-			Expr::Application {
-				func: None,
-				args: None,
-			},
-		);
+		place_expr(commands, &mut app_state, &mut state, WrappedExpr::APPLICATION);
 	} else if mouse_input.clear_just_pressed(MouseButton::Left) {
 		app_state.push(AppState::WiringObject).unwrap();
 	}
@@ -109,13 +92,13 @@ fn input_system(
 fn block_input(
 	mut commands: Commands,
 	mut keyboard_input: ResMut<Input<KeyCode>>,
-	objects: Query<(&HoverState, Option<&TopHover>, Option<&BottomHover>)>
+	objects: Query<(Entity, &HoverState, Option<&TopHover>, Option<&BottomHover>)>,
 ) {
-	for (state, top, bottom) in objects.iter() {
+	for (entity, state, top, bottom) in objects.iter() {
 		match (state, top, bottom) {
 			(HoverState::Yes { .. }, Some(_), None) => {
 				if keyboard_input.clear_just_pressed(KeyCode::C) {
-					
+					commands.entity(entity).insert(WireFrom);
 				}
 			}
 			(HoverState::Yes { .. }, None, Some(_)) => {
@@ -131,6 +114,12 @@ fn block_input(
 struct WireFrom;
 struct WireFromUpdate(Entity);
 
+// Component that travels from Variable to Lambda and once it gets there, it changes the state.
+#[derive(Component)]
+struct WireFinder {
+	bind: Binding<'static>,
+}
+
 // System for wiring things up
 fn wiring_system(
 	mut commands: Commands,
@@ -138,30 +127,13 @@ fn wiring_system(
 	mut state: ResMut<GameState>,
 	mut top_hover: Query<(Entity, &ObjectData, &HoverState), With<TopHover>>,
 	mut wiring_from: Query<Entity, With<WireFrom>>,
-	mut update_wire_from: EventReader<WireFromUpdate>
+	mut mouse: ResMut<Input<MouseButton>>,
 ) {
-	if !update_wire_from.is_empty() {
-		if let Ok(entity) = wiring_from.get_single() {
-			commands.entity(entity).remove::<WireFrom>();
-		}
-		if let Some(ev) = update_wire_from.iter().last() {
-			commands.entity(ev.0).insert(WireFrom);
-			return;
+	if let Ok(wiring_from) = wiring_from.get_single_mut() {
+		if let Ok((entity, data, state)) = top_hover.get_single_mut() {
+			if mouse.clear_just_pressed(MouseButton::Left) {
+				commands.entity(entity).insert(WireFinder { bind: Binding::End });
+			}
 		}
 	}
-	/* if h_hover_state.is_top() {
-					
-	} */
-	/* if let Some(wiring_from) = wiring_from {
-		/* if let Expr::Function { bind, expr: Some(expr_entity) } = expr {
-			for (h_entity, h_data, h_hover_state) in hover_set.iter_mut() {
-				
-			}
-		} else {
-			commands.entity(entity).remove::<WiringFrom>();
-			app_state.pop().unwrap()
-		} */
-	} else {
-		// detect hovering
-	} */
 }
