@@ -1,10 +1,7 @@
 use bevy::{prelude::*, ui::FocusPolicy};
 use hashdb::LinkArena;
 
-use crate::{
-	block::{Binding, Expr},
-	place_expr, AppState, GameState, mouseover::HoverState,
-};
+use crate::{AppState, GameState, block::{WrappedExpr}, place_expr};
 
 pub fn ui_setup(mut commands: Commands, asset_server: Res<AssetServer>) {
 	commands.spawn_bundle(UiCameraBundle::default());
@@ -69,7 +66,7 @@ pub fn ui_setup(mut commands: Commands, asset_server: Res<AssetServer>) {
 						parent,
 						asset_server.load("VariableDot.png"),
 						|commands, app_state, state| {
-							place_expr(commands, app_state, state, Expr::Variable);
+							place_expr(commands, app_state, state, WrappedExpr::VARIABLE);
 							info!("Added variable");
 						},
 					);
@@ -81,10 +78,7 @@ pub fn ui_setup(mut commands: Commands, asset_server: Res<AssetServer>) {
 								commands,
 								app_state,
 								state,
-								Expr::Function {
-									bind: Binding::None,
-									expr: None,
-								},
+								WrappedExpr::LAMBDA,
 							);
 							info!("Added function");
 						},
@@ -97,10 +91,7 @@ pub fn ui_setup(mut commands: Commands, asset_server: Res<AssetServer>) {
 								commands,
 								app_state,
 								state,
-								Expr::Application {
-									func: None,
-									args: None,
-								},
+								WrappedExpr::APPLICATION,
 							);
 							info!("Added application");
 						},
