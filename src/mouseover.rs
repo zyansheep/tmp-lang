@@ -10,18 +10,21 @@ pub enum Side {
 	First,
 	Second,
 }
+
+#[derive(Component, Debug, Clone, Copy)]
+pub struct TopHover;
+#[derive(Component, Debug, Clone, Copy)]
+pub struct BottomHover;
+
 #[derive(Component, Debug, PartialEq)]
 pub enum HoverState {
-	Yes { order: f32, side: Side, top: bool, bottom: bool },
+	Yes { order: f32, side: Side },
 	No,
-}
-impl HoverState {
-	pub fn is_top(&self) -> bool { if let Self::Yes { top: true, .. } = self { true } else { false } }
-	pub fn is_bottom(&self) -> bool { if let Self::Yes { bottom: true, .. } = self { true } else { false } }
 }
 
 // Mark objects as currently being hovered over.
 pub fn mouseover_system(
+	mut commands: Commands,
 	mouse: Query<&MousePosWorld, (Changed<MousePosWorld>, With<MainCamera>)>,
 	mut objects: ParamSet<(
 		Query<(Entity, &ObjectData, &GlobalTransform, &mut HoverState)>,
@@ -56,7 +59,7 @@ pub fn mouseover_system(
 				};
 				// Order Hovered objects by their size, smallest hovered object should be the one highlighted
 				let order = data.size;
-				*hover_state = HoverState::Yes { order, side, top: false, bottom: false };
+				*hover_state = HoverState::Yes { order, side };
 				if order <= top_order {
 					top_order = order;
 					top_entity = Some(entity);
@@ -73,15 +76,12 @@ pub fn mouseover_system(
 		}
 		for (entity, mut hover_state) in objects.p1().iter_mut() {
 			if Some(entity) == top_entity {
-				if let HoverState::Yes { top, .. } = &mut *hover_state {
-					*top = true;
-				}
-			}
+				commands.entity(entity).insert(TopHover);
+			} else { commands.entity(entity).remove::<TopHover>(); }
+			
 			if Some(entity) == bottom_entity {
-				if let HoverState::Yes { bottom, .. } = &mut *hover_state {
-					*bottom = true;
-				}
-			}
+				commands.entity(entity).insert(BottomHover);
+			} else { commands.entity(entity).remove::<BottomHover>(); }
 		}
 		
 	}
