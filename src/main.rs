@@ -4,7 +4,7 @@ use bevy_mouse_tracking_plugin::{MainCamera, MousePosPlugin};
 use bevy_pancam::{PanCam, PanCamPlugin};
 use block::{ObjectData, Orientation, WrappedExpr};
 use block_to_expr::block_to_expr;
-use expr::Binding;
+use expr::{Binding, Expr};
 use hashdb::LinkArena;
 use mouseover::{BottomHover, HoverState, TopHover};
 use placing::place_expr;
@@ -49,6 +49,7 @@ fn main() {
 		.add_system(state_change_detect)
 		.add_system(ui::button_system)
     	.add_system(bevy::window::exit_on_window_close_system)
+		.add_system(exprs_forming_system)
 		.init_resource::<GameState>()
 		.run();
 }
@@ -176,6 +177,41 @@ fn wiring_system(
 		if keyboard.clear_just_pressed(KeyCode::Escape) {
 			commands.entity(wiring_from).remove::<WireFrom>();
 			app_state.pop().unwrap();
+		}
+	}
+}
+
+fn exprs_forming_system(
+	mut paramset: ParamSet<(Query<(&ObjectData, &mut WrappedExpr, Entity)>, Query<(&ObjectData, &mut WrappedExpr, Entity)>)>
+) {
+	let mut exprs: Vec<(Expr, Entity)> = Vec::new();
+	for (data, w_expr, entity) in paramset.p0().iter() {
+		match w_expr {
+			WrappedExpr::Variable { bound: Some(_) } => {
+				exprs.push((Expr::Variable, entity));
+			}
+			WrappedExpr::Application {formed: Some(expr), ..} 
+			| WrappedExpr::Lambda {formed: Some(expr), ..} => {
+				exprs.push((expr.clone(), entity));
+			}
+			_ => {}
+		}
+	}
+	for (data, mut w_expr, entity) in paramset.p1().iter_mut() {
+		let mut expr_option: Option<&Expr> = None;
+		for (e_expr, e_entity) in exprs.iter_mut() {
+			if entity == *e_entity {
+				expr_option = Some(e_expr);
+			}
+		}
+		if let Some(expr) = expr_option {
+			match  &mut (*w_expr) {
+				WrappedExpr::Application { formed, .. }
+				| WrappedExpr::Lambda { formed, .. } => {
+					*formed = Some(expr.clone());
+				}
+				_ => {}
+			}
 		}
 	}
 }
