@@ -35,10 +35,10 @@ fn main() {
 		.add_state(AppState::Default)
 		.add_system_set(SystemSet::on_update(AppState::Default).with_system(keyboard_input_system))
 		.add_system_set(SystemSet::on_update(AppState::PlacingObject).with_system(placing_system))
-		// .add_system(keyboard_input_system)
 		.add_system(data_update).add_system(expr_update).add_system(hover_update)
 		.add_system(mouseover::mouseover_system)
 		.add_system(ui::button_system)
+    	.add_system(bevy::window::exit_on_window_close_system)
 		.init_resource::<GameState>()
 		.run();
 }
