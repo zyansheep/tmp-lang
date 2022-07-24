@@ -209,7 +209,8 @@ fn wiring_system(
 	mut wire: Query<(Entity, &mut Wire, Option<&mut Path>), With<ActiveWire>>,
 	mouse_pos: Res<MousePosWorld>,
 ) {
-	if let Ok((entity, mut wire, mut path)) = wire.get_single_mut() {
+	// Start wiring if there is an active wire
+	if let Ok((wire_entity, mut wire, mut path)) = wire.get_single_mut() {
 		wire.end = Vec2::new(mouse_pos.x, mouse_pos.y);
 		if let Ok((entity, data, expr, state)) = top_hover.get_single_mut() {
 			if mouse.clear_just_pressed(MouseButton::Left) {
@@ -220,20 +221,21 @@ fn wiring_system(
 						commands.entity(entity).insert(FormConnection(wire.from, wire.port.swap()));
 						wire.end = data.location;
 						app_state.pop().unwrap();
+						commands.entity(wire_entity).remove::<ActiveWire>();
 					}
 					_ => {},
 				}
 			}
 		}
 		if keyboard.clear_just_pressed(KeyCode::Escape) {
-			commands.entity(entity).despawn();
+			commands.entity(wire_entity).despawn();
 			app_state.pop().unwrap();
 		}
 
 		// Build line
 		let mut path_builder = PathBuilder::new();
-		path_builder.move_to(wire.start);
-		path_builder.line_to(wire.end);
+		path_builder.move_to(Vec2::ZERO);
+		path_builder.line_to(wire.end - wire.start);
 		let line = path_builder.build();
 		if let Some(path) = &mut path {
 			**path = line;
@@ -241,7 +243,7 @@ fn wiring_system(
 			commands.spawn().insert_bundle(GeometryBuilder::build_as(
 				&line,
 				DrawMode::Stroke(StrokeMode::new(Color::BLACK, 10.0)),
-				Transform::from_xyz(0.0, 0.0, 1000.0),
+				Transform::from_translation(wire.start.extend(1000.0)),
 			));
 		}
 	}

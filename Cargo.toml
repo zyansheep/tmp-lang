@@ -1,8 +1,8 @@
 [package]
-name = "tmp-lang"
+name = "block-lang"
 version = "0.1.0"
 edition = "2021"
-default-run = "tmp-lang"
+default-run = "block-lang"
 
 [[bin]]
 name = "cli"
