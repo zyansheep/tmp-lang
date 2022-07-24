@@ -53,11 +53,11 @@ fn setup(mut commands: Commands) {
 		.insert(PanCam { track_mouse: true, ..default() });
 }
 
-fn state_change(app_state: Res<State<AppState>>) {
+/* fn state_change(app_state: Res<State<AppState>>) {
 	if app_state.is_changed() {
 		info!("State changed: {:?}", app_state.current());
 	}
-}
+} */
 
 #[derive(Default)]
 pub struct GameState {
