@@ -99,7 +99,7 @@ pub fn ui_setup(mut commands: Commands, asset_server: Res<AssetServer>) {
 
 					parent.spawn_bundle(TextBundle {
 						style: Style {
-							size: Size::new(Val::Px(100.), Val::Px(70.)),
+							size: Size::new(Val::Px(100.), Val::Undefined),
 							margin: Rect {
 								left: Val::Auto,
 								right: Val::Auto,
@@ -109,7 +109,7 @@ pub fn ui_setup(mut commands: Commands, asset_server: Res<AssetServer>) {
 							..default()
 						},
 						text: Text::with_section(
-							format!("{}", &crate::expr::Expr::Variable),
+							"expression",
 							TextStyle {
 								font: asset_server.load("fonts/SourceCodePro.ttf"),
 								font_size: 16.,
@@ -122,13 +122,42 @@ pub fn ui_setup(mut commands: Commands, asset_server: Res<AssetServer>) {
 							
 						),
 						..default()
-					}).insert(TextThatShouldBeChangedToExpression{});
+					}).insert(ExpressionText{});
+
+					parent.spawn_bundle(TextBundle {
+						style: Style {
+							size: Size::new(Val::Px(100.), Val::Undefined),
+							margin: Rect {
+								left: Val::Auto,
+								right: Val::Auto,
+								top: Val::Px(10.),
+								..default()
+							},
+							..default()
+						},
+						text: Text::with_section(
+							"reduced expression",
+							TextStyle {
+								font: asset_server.load("fonts/SourceCodePro.ttf"),
+								font_size: 16.,
+								color: Color::WHITE,
+							},
+							TextAlignment {
+								horizontal: HorizontalAlign::Center,
+								vertical: VerticalAlign::Top,
+							},
+							
+						),
+						..default()
+					}).insert(ReducedText{});
 				});
 		});
 }
 
 #[derive(Component)]
-pub struct TextThatShouldBeChangedToExpression;
+pub struct ExpressionText;
+#[derive(Component)]
+pub struct ReducedText;
 
 fn build_button(
 	parent: &mut ChildBuilder,
