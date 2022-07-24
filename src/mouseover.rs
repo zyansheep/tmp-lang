@@ -34,7 +34,7 @@ pub fn mouseover_system(
 ) {
 	if let Ok(mouse) = mouse.get_single() {
 		let (mut top_order, mut top_entity) = (f32::MAX, None::<Entity>);
-		let (mut bottom_order, mut bottom_entity) = (f32::MAX, None::<Entity>);
+		let (mut bottom_order, mut bottom_entity) = (0.0, None::<Entity>);
 
 		for (entity, data, transform, mut hover_state) in objects.p0().iter_mut() {
 			let loc = transform.translation;

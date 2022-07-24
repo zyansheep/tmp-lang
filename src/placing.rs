@@ -16,6 +16,7 @@ pub fn place_expr(
 	state: &mut GameState,
 	expr: WrappedExpr,
 ) {
+	info!("Placing: {:?}", expr);
 	match app_state.current() {
 		AppState::Default => {
 			state.just_pressed = true; // Prevent a single mouse click

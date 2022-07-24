@@ -20,7 +20,7 @@ pub enum Expr {
 	Variable,
 } */
 
-#[derive(Component, Clone)]
+#[derive(Component, Clone, Debug)]
 pub enum WrappedExpr {
 	Variable { bound: Option<Entity> },
 	Lambda {

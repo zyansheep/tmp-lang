@@ -17,8 +17,9 @@ mod ui;
 
 const IMAGE_SIZE: f32 = 300.0;
 
-#[derive(Clone, PartialEq, Eq, Debug, Hash)]
+#[derive(Clone, PartialEq, Eq, Debug, Hash, Default)]
 pub enum AppState {
+	#[default]
 	Default,
 	PlacingObject,
 	WiringObject,
@@ -33,7 +34,7 @@ fn main() {
 		.add_startup_system(setup)
 		.add_startup_system(ui::ui_setup)
 		.add_state(AppState::Default)
-		.add_system_set(SystemSet::on_update(AppState::Default).with_system(input_system))
+		.add_system_set(SystemSet::on_update(AppState::Default).with_system(input_system).with_system(block_input))
 
 		.add_system_set(SystemSet::on_update(AppState::PlacingObject).with_system(placing::placing_system))
 
@@ -42,7 +43,7 @@ fn main() {
 
 		.add_system(block::data_update).add_system(block::expr_update).add_system(block::hover_update)
 		.add_system(mouseover::mouseover_system)
-		// .add_system(state_change)
+		.add_system(state_change_detect)
 		.add_system(ui::button_system)
     	.add_system(bevy::window::exit_on_window_close_system)
 		.init_resource::<GameState>()
@@ -56,11 +57,13 @@ fn setup(mut commands: Commands) {
 		.insert(PanCam { track_mouse: true, ..default() });
 }
 
-/* fn state_change(app_state: Res<State<AppState>>) {
-	if app_state.is_changed() {
+fn state_change_detect(app_state: Res<State<AppState>>, mut previous: Local<AppState>) {
+	let current = app_state.current();
+	if *previous != *current {
 		info!("State changed: {:?}", app_state.current());
+		*previous = current.clone();
 	}
-} */
+}
 
 #[derive(Default)]
 pub struct GameState {
@@ -104,8 +107,10 @@ fn block_input(
 			(HoverState::Yes { .. }, None, Some(_)) => {
 				
 			}
+			(HoverState::Yes { .. }, Some(_), Some(_)) => {}
+			(HoverState::Yes { .. }, None, None) => {}
 			(HoverState::No, None, None) => {}
-			_ => { panic!("Invalid Hover component configuration") }
+			_ => { panic!("Invalid Hover component configuration: {entity:?}, {state:?}, {top:?}, {bottom:?}") }
 		}
 	}
 }
@@ -141,5 +146,4 @@ fn wiring_system(
 			app_state.pop().unwrap();
 		}
 	}
-	
 }
