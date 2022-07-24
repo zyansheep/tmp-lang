@@ -39,7 +39,7 @@ fn main() {
     	.add_system_set(SystemSet::on_update(AppState::WiringObject).with_system(wiring_system))
 		.add_system(block::data_update).add_system(block::expr_update).add_system(block::hover_update)
 		.add_system(mouseover::mouseover_system)
-		.add_system(state_change)
+		// .add_system(state_change)
 		// .add_system(ui::button_system)
     	.add_system(bevy::window::exit_on_window_close_system)
 		.init_resource::<GameState>()
