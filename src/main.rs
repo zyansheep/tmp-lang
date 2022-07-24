@@ -84,9 +84,9 @@ fn input_system(
 		place_expr(commands, &mut app_state, &mut state, WrappedExpr::VARIABLE);
 	} else if keyboard_input.just_pressed(KeyCode::A) {
 		place_expr(commands, &mut app_state, &mut state, WrappedExpr::APPLICATION);
-	} else if mouse_input.clear_just_pressed(MouseButton::Left) {
+	} /* else if mouse_input.clear_just_pressed(MouseButton::Left) {
 		app_state.push(AppState::WiringObject).unwrap();
-	}
+	} */
 }
 
 fn block_input(
@@ -128,6 +128,7 @@ fn wiring_system(
 	mut top_hover: Query<(Entity, &ObjectData, &HoverState), With<TopHover>>,
 	mut wiring_from: Query<Entity, With<WireFrom>>,
 	mut mouse: ResMut<Input<MouseButton>>,
+	mut keyboard: ResMut<Input<KeyCode>>,
 ) {
 	if let Ok(wiring_from) = wiring_from.get_single_mut() {
 		if let Ok((entity, data, state)) = top_hover.get_single_mut() {
@@ -135,5 +136,10 @@ fn wiring_system(
 				commands.entity(entity).insert(WireFinder { bind: Binding::End });
 			}
 		}
+		if keyboard.clear_just_pressed(KeyCode::Escape) {
+			commands.entity(wiring_from).remove::<WireFrom>();
+			app_state.pop().unwrap();
+		}
 	}
+	
 }
