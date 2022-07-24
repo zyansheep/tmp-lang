@@ -1,3 +1,5 @@
+//! Systems and structs to place Blocks
+
 use std::f32::consts::FRAC_1_SQRT_2;
 
 use bevy::prelude::*;
@@ -14,17 +16,26 @@ pub fn place_expr(
 	state: &mut GameState,
 	expr: Expr,
 ) {
-	commands
-		.spawn_bundle(Object { expr, ..default() })
-		.insert(Placing);
-	app_state.set(AppState::PlacingObject).unwrap();
-	state.placing_index += 1.0;
+	state.just_placed = true; // Prevent a single mouse click
+	match app_state.current() {
+		AppState::Default => {
+			commands
+				.spawn_bundle(Object { expr, ..default() })
+				.insert(Placing);
+			app_state.set(AppState::PlacingObject).unwrap();
+			state.placing_index += 1.0;
+		}
+		AppState::PlacingObject => {
+			state.update_placing_expr = Some(expr);
+		}
+	}
+	
 }
 
 // System for placing blocks on the canvas and inside other blocks
 pub fn placing_system(
 	mut commands: Commands,
-	mouse: Res<Input<MouseButton>>,
+	mut mouse: ResMut<Input<MouseButton>>,
 	mouse_pos: Res<MousePosWorld>,
 	mut state: ResMut<GameState>,
 	mut app_state: ResMut<State<AppState>>,
@@ -34,8 +45,16 @@ pub fn placing_system(
 	camera_proj: Query<&OrthographicProjection, With<MainCamera>>,
 	asset_server: Res<AssetServer>,
 ) {
+	if state.just_placed {
+		state.just_placed = false;
+		mouse.clear_just_pressed(MouseButton::Left);
+	}
 	// Fetch data on block-to-place
 	let (entity, mut data, mut expr, sprite) = placing.single_mut();
+
+	if let Some(new_expr) = state.update_placing_expr.take() {
+		*expr = new_expr;
+	}
 
 	data.size = camera_proj.iter().next().unwrap().scale * 300.0; // Scale block-to-place with size
 	data.location = Vec2::new(mouse_pos.x, mouse_pos.y); // Move block-to-place to mouse cursor

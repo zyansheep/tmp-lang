@@ -1,3 +1,5 @@
+//! Systems to detect mouse over blocks
+
 use bevy::prelude::*;
 use bevy_mouse_tracking_plugin::{MainCamera, MousePosWorld};
 

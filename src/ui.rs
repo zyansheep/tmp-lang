@@ -1,4 +1,4 @@
-use bevy::prelude::*;
+use bevy::{prelude::*, ui::FocusPolicy};
 
 use crate::{
 	block::{Binding, Expr},
@@ -66,8 +66,7 @@ pub fn ui_setup(mut commands: Commands, asset_server: Res<AssetServer>) {
 
 					build_button(
 						parent,
-						asset_server.load("fonts/Inter.ttf"),
-						"Add variable",
+						asset_server.load("VariableDot.png"),
 						|commands, app_state, state| {
 							place_expr(commands, app_state, state, Expr::Variable);
 							info!("Added variable");
@@ -75,8 +74,7 @@ pub fn ui_setup(mut commands: Commands, asset_server: Res<AssetServer>) {
 					);
 					build_button(
 						parent,
-						asset_server.load("fonts/Inter.ttf"),
-						"Add function",
+						asset_server.load("Lambda.png"),
 						|commands, app_state, state| {
 							place_expr(
 								commands,
@@ -92,8 +90,7 @@ pub fn ui_setup(mut commands: Commands, asset_server: Res<AssetServer>) {
 					);
 					build_button(
 						parent,
-						asset_server.load("fonts/Inter.ttf"),
-						"Add application",
+						asset_server.load("Application.png"),
 						|commands, app_state, state| {
 							place_expr(
 								commands,
@@ -113,8 +110,7 @@ pub fn ui_setup(mut commands: Commands, asset_server: Res<AssetServer>) {
 
 fn build_button(
 	parent: &mut ChildBuilder,
-	font: Handle<Font>,
-	text: &str,
+	image: Handle<Image>,
 	handler: ClickHandlerFunction,
 ) {
 	parent
@@ -131,29 +127,13 @@ fn build_button(
 				align_items: AlignItems::Center,
 				..default()
 			},
-			color: Color::rgb(0.35, 0.75, 0.35).into(),
+			focus_policy: FocusPolicy::Pass,
+			// color: Color::rgb(0.35, 0.75, 0.35).into(),
 			..default()
 		})
 		.with_children(|parent| {
-			parent.spawn_bundle(TextBundle {
-				style: Style {
-					size: Size::new(Val::Undefined, Val::Undefined),
-					margin: Rect {
-						left: Val::Auto,
-						right: Val::Auto,
-						..default()
-					},
-					..default()
-				},
-				text: Text::with_section(
-					text,
-					TextStyle {
-						font,
-						font_size: 25.,
-						color: Color::WHITE,
-					},
-					Default::default(),
-				),
+			parent.spawn_bundle(ImageBundle {
+				image: image.into(),
 				..default()
 			});
 		})

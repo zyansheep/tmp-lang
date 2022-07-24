@@ -1,3 +1,5 @@
+//! Systems and structs to deal with blocks.
+
 use std::f32::consts::{FRAC_1_SQRT_2, FRAC_PI_2, PI};
 
 use bevy::prelude::*;

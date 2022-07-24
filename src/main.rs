@@ -54,6 +54,8 @@ pub struct GameState {
 	placing_orientation: Orientation,
 	placing_index: f32,
 	top_hovering: Option<Entity>,
+	just_placed: bool,
+	update_placing_expr: Option<Expr>,
 }
 
 // System for triggering things based on keyboard input
