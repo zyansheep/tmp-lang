@@ -42,7 +42,7 @@ pub fn placing_system(
 	mut state: ResMut<GameState>,
 	mut app_state: ResMut<State<AppState>>,
 	mut placing: Query<(Entity, &mut ObjectData, &mut Expr, Option<&mut Sprite>), With<Placing>>,
-	mut other_objects: Query<(Entity, &mut ObjectData, &mut Expr, &HoverState), (Without<Placing>, Changed<HoverState>)>,
+	mut other_objects: Query<(Entity, &mut ObjectData, &mut Expr, &HoverState), Without<Placing>>,
 	keyboard_input: Res<Input<KeyCode>>,
 	camera_proj: Query<&OrthographicProjection, With<MainCamera>>,
 	asset_server: Res<AssetServer>,
@@ -57,11 +57,10 @@ pub fn placing_system(
 	if let Some(new_expr) = state.update_placing_expr.take() {
 		*expr = new_expr;
 	}
-
 	data.size = camera_proj.iter().next().unwrap().scale * 300.0; // Scale block-to-place with size
 	data.location = Vec2::new(mouse_pos.x, mouse_pos.y); // Move block-to-place to mouse cursor
 	data.orientation = state.placing_orientation; // Set orientation based on game state
-
+	
 	for (h_entity, mut h_data, mut h_expr, h_hover_state) in other_objects.iter_mut() {
 		if let HoverState::Yes { side, top: true, .. } = h_hover_state {
 			// Make sure we can place block
