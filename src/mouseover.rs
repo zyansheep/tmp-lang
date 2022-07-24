@@ -11,24 +11,23 @@ pub enum Side {
 	Second,
 }
 #[derive(Component, Debug, PartialEq)]
-pub struct Hovering { pub order: f32, pub side: Side }
-impl PartialOrd for Hovering {
-	fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-		self.order.partial_cmp(&other.order)
-	}
+pub enum HoverState {
+	Yes { order: f32, side: Side, top: bool },
+	No,
+}
+impl HoverState {
+	pub fn is_top(&self) -> bool { if let Self::Yes { top: true, .. } = self { true } else { false } }
 }
 
 // Mark objects as currently being hovered over.
 pub fn mouseover_system(
-	mut commands: Commands,
 	mouse: Query<&MousePosWorld, (Changed<MousePosWorld>, With<MainCamera>)>,
-	objects: Query<(Entity, &ObjectData, &GlobalTransform), Without<Placing>>,
-	mut state: ResMut<GameState>,
+	mut objects: Query<(Entity, &ObjectData, &GlobalTransform, &mut HoverState), Without<Placing>>,
 ) {
-	let (mut cur_hover_order, mut cur_entity) = (f32::MAX, None::<Entity>);
+	let (mut top_order, mut top_entity) = (f32::MAX, None::<Entity>);
 	if let Ok(mouse) = mouse.get_single() {
 		// info!("Mouse Coords: {}", mouse);
-		for (entity, data, transform) in objects.iter() {
+		for (entity, data, transform, mut hover_state) in objects.iter_mut() {
 			let loc = transform.translation;
 			let size = data.size();
 
@@ -50,17 +49,27 @@ pub fn mouseover_system(
 					_ => Side::Second,
 				};
 				// Order Hovered objects by their size, smallest hovered object should be the one highlighted
-				let hovering = Hovering { order: data.size, side };
-				if hovering.order <= cur_hover_order {
-					cur_hover_order = hovering.order;
-					cur_entity = Some(entity);
+				let order = data.size;
+				if order <= top_order {
+					top_order = order;
+					top_entity = Some(entity);
 				}
-				commands.entity(entity).insert(hovering);
+				*hover_state = HoverState::Yes { order, side, top: false };
 				
 			} else {
-				commands.entity(entity).remove::<Hovering>();
+				*hover_state = HoverState::No;
 			}
 		}
-		state.top_hovering = cur_entity;
+		info!("round");
+		for (entity, _, _, mut state) in objects.iter_mut() {
+			info!("{entity:?}: {:?}", state);
+			if Some(entity) == top_entity {
+				if let HoverState::Yes { top, .. } = &mut *state {
+					*top = true;
+				}
+				break
+			}
+		}
+		
 	}
 }

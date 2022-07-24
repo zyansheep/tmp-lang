@@ -2,7 +2,8 @@ use bevy::prelude::*;
 // use bevy_mod_picking::{DebugEventsPickingPlugin, DefaultPickingPlugins, PickableBundle, PickingCameraBundle, PickingEvent};
 use bevy_mouse_tracking_plugin::{MainCamera, MousePosPlugin};
 use bevy_pancam::{PanCam, PanCamPlugin};
-use block::{Orientation};
+use block::{ObjectData, Orientation};
+use mouseover::HoverState;
 use placing::place_expr;
 
 mod expr;
@@ -21,6 +22,7 @@ const IMAGE_SIZE: f32 = 300.0;
 pub enum AppState {
 	Default,
 	PlacingObject,
+	WiringObject,
 }
 
 fn main() {
@@ -30,13 +32,14 @@ fn main() {
 		.add_plugin(PanCamPlugin::default())
 		.add_plugin(MousePosPlugin::SingleCamera)
 		.add_startup_system(setup)
-		.add_startup_system(ui::ui_setup)
+		// .add_startup_system(ui::ui_setup)
 		.add_state(AppState::Default)
-		.add_system_set(SystemSet::on_update(AppState::Default).with_system(keyboard_input_system))
+		.add_system_set(SystemSet::on_update(AppState::Default).with_system(input_system))
 		.add_system_set(SystemSet::on_update(AppState::PlacingObject).with_system(placing::placing_system))
+    	.add_system_set(SystemSet::on_update(AppState::WiringObject).with_system(wiring_system))
 		.add_system(block::data_update).add_system(block::expr_update).add_system(block::hover_update)
 		.add_system(mouseover::mouseover_system)
-		.add_system(ui::button_system)
+		// .add_system(ui::button_system)
     	.add_system(bevy::window::exit_on_window_close_system)
 		.init_resource::<GameState>()
 		.run();
@@ -53,17 +56,17 @@ fn setup(mut commands: Commands) {
 pub struct GameState {
 	placing_orientation: Orientation,
 	placing_index: f32,
-	top_hovering: Option<Entity>,
 	just_placed: bool,
 	update_placing_expr: Option<Expr>,
 }
 
 // System for triggering things based on keyboard input
-fn keyboard_input_system(
+fn input_system(
 	mut commands: Commands,
 	mut state: ResMut<GameState>,
 	mut app_state: ResMut<State<AppState>>,
 	keyboard_input: Res<Input<KeyCode>>,
+	mouse_input: Res<Input<MouseButton>>,
 ) {
 	if keyboard_input.just_pressed(KeyCode::F) {
 		place_expr(
@@ -87,9 +90,34 @@ fn keyboard_input_system(
 				args: None,
 			},
 		);
-	} else if keyboard_input.just_pressed(KeyCode::D) {
-		if let Some(entity) = state.top_hovering {
-			commands.entity(entity).despawn()
-		}
+	} else if mouse_input.just_pressed(MouseButton::Left) {
+		app_state.push(AppState::WiringObject).unwrap();
 	}
+}
+
+#[derive(Component, Debug, Clone, Copy)]
+struct WiringFrom;
+
+// System for wiring things up
+fn wiring_system(
+	mut commands: Commands,
+	mut app_state: ResMut<State<AppState>>,
+	mut state: ResMut<GameState>,
+	mut hover_set: Query<(Entity, &ObjectData, &HoverState), Changed<HoverState>>,
+	mut wiring_from: Local<Option<Entity>>,
+) {
+	/* if let Some(wiring_from) = wiring_from {
+		/* if let Expr::Function { bind, expr: Some(expr_entity) } = expr {
+			for (h_entity, h_data, h_hover_state) in hover_set.iter_mut() {
+				if h_hover_state.is_top() {
+					
+				}
+			}
+		} else {
+			commands.entity(entity).remove::<WiringFrom>();
+			app_state.pop().unwrap()
+		} */
+	} else {
+		// detect hovering
+	} */
 }

@@ -5,7 +5,7 @@ use std::f32::consts::FRAC_1_SQRT_2;
 use bevy::prelude::*;
 use bevy_mouse_tracking_plugin::{MainCamera, MousePosWorld};
 
-use crate::{AppState, GameState, block::{Binding, Expr, Object, ObjectData, Orientation}, mouseover::{Hovering, Side}};
+use crate::{AppState, GameState, block::{Binding, Expr, Object, ObjectData, Orientation}, mouseover::{HoverState, Side}};
 
 #[derive(Component, Default, Clone)]
 pub struct Placing;
@@ -16,9 +16,9 @@ pub fn place_expr(
 	state: &mut GameState,
 	expr: Expr,
 ) {
-	state.just_placed = true; // Prevent a single mouse click
 	match app_state.current() {
 		AppState::Default => {
+			state.just_placed = true; // Prevent a single mouse click
 			commands
 				.spawn_bundle(Object { expr, ..default() })
 				.insert(Placing);
@@ -26,8 +26,10 @@ pub fn place_expr(
 			state.placing_index += 1.0;
 		}
 		AppState::PlacingObject => {
+			state.just_placed = true; // Prevent a single mouse click
 			state.update_placing_expr = Some(expr);
 		}
+		_ => {},
 	}
 	
 }
@@ -40,7 +42,7 @@ pub fn placing_system(
 	mut state: ResMut<GameState>,
 	mut app_state: ResMut<State<AppState>>,
 	mut placing: Query<(Entity, &mut ObjectData, &mut Expr, Option<&mut Sprite>), With<Placing>>,
-	mut other_objects: Query<(Entity, &mut ObjectData, &mut Expr, &Hovering), Without<Placing>>,
+	mut other_objects: Query<(Entity, &mut ObjectData, &mut Expr, &HoverState), (Without<Placing>, Changed<HoverState>)>,
 	keyboard_input: Res<Input<KeyCode>>,
 	camera_proj: Query<&OrthographicProjection, With<MainCamera>>,
 	asset_server: Res<AssetServer>,
@@ -60,10 +62,10 @@ pub fn placing_system(
 	data.location = Vec2::new(mouse_pos.x, mouse_pos.y); // Move block-to-place to mouse cursor
 	data.orientation = state.placing_orientation; // Set orientation based on game state
 
-	for (h_entity, mut h_data, mut h_expr, h_hovering) in other_objects.iter_mut() {
-		if state.top_hovering == Some(h_entity) {
+	for (h_entity, mut h_data, mut h_expr, h_hover_state) in other_objects.iter_mut() {
+		if let HoverState::Yes { side, top: true, .. } = h_hover_state {
 			// Make sure we can place block
-			if let Some((side, expr_slot)) = match (&mut *h_expr, h_hovering.side) {
+			if let Some((side, expr_slot)) = match (&mut *h_expr, side) {
 				(Expr::Function { bind: _, expr }, Side::First) if expr.is_none() => {
 					h_data.flip = true; // Make sure the dot is on the right side of the Function block texture
 					Some((Side::First, expr))

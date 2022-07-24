@@ -4,7 +4,7 @@ use std::f32::consts::{FRAC_1_SQRT_2, FRAC_PI_2, PI};
 
 use bevy::prelude::*;
 
-use crate::{GameState, placing::Placing};
+use crate::{GameState, mouseover::{HoverState}, placing::Placing};
 
 pub enum Binding {
 	None,
@@ -99,12 +99,12 @@ pub fn expr_update(mut objects: Query<(&Expr, &mut Handle<Image>), Changed<Expr>
 // System for updating blocks based on external state
 pub fn hover_update(
 	mut objects: Query<
-		(Entity, &mut Sprite),
-		Without<Placing>,
+		(&HoverState, &mut Sprite),
+		(Changed<HoverState>, Without<Placing>),
 	>,
 	state: ResMut<GameState>,
 ) {
-	for (entity, mut sprite) in objects.iter_mut() {
-		sprite.color = ObjectData::gen_color(state.top_hovering == Some(entity));
+	for (state, mut sprite) in objects.iter_mut() {
+		sprite.color = ObjectData::gen_color(state.is_top());
 	}
 }
