@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy_mouse_tracking_plugin::{MainCamera, MousePosWorld};
 
-use crate::{GameState, Placing, objects::{ObjectData, Orientation}};
+use crate::{GameState, placing::Placing, block::{ObjectData, Orientation}};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Side {

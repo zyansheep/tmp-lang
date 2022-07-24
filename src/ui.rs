@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 use crate::{
-	objects::{Binding, Expr},
+	block::{Binding, Expr},
 	place_expr, AppState, GameState,
 };
 

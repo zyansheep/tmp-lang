@@ -2,6 +2,8 @@ use std::f32::consts::{FRAC_1_SQRT_2, FRAC_PI_2, PI};
 
 use bevy::prelude::*;
 
+use crate::{GameState, placing::Placing};
+
 pub enum Binding {
 	None,
 	End,
@@ -44,16 +46,7 @@ pub struct ObjectData {
 
 impl ObjectData {
 	pub fn gen_color(hovering: bool) -> Color {
-		/* let color = match expr {
-			Expr::Function { .. } => Color::BLUE,
-			Expr::Application { .. } => Color::GRAY,
-			Expr::Variable => Color::RED,
-		}; */
-		if !hovering {
-			Color::GRAY
-		} else {
-			Color::rgb_u8(255, 255, 255)
-		}
+		if !hovering { Color::GRAY } else { Color::WHITE }
 	}
 	pub fn gen_sprite(&self) -> Sprite {
 		Sprite {
@@ -78,7 +71,6 @@ impl ObjectData {
 			scale: Vec3::new(scale, scale, 1.0),
 		}
 	}
-
 	// Gen rectangles of A4-paper size
 	pub fn size(&self) -> Vec2 {
 		Vec2::new(self.size, self.size * FRAC_1_SQRT_2)
@@ -89,4 +81,28 @@ impl ObjectData {
 pub struct Object {
 	pub data: ObjectData,
 	pub expr: Expr,
+}
+
+pub fn data_update(mut objects: Query<(&ObjectData, &mut Transform), Changed<ObjectData>>) {
+	for (data, mut transform) in objects.iter_mut() {
+		let index = transform.translation.z;
+		*transform = data.gen_transform(index);
+	}
+}
+pub fn expr_update(mut objects: Query<(&Expr, &mut Handle<Image>), Changed<Expr>>, asset_server: Res<AssetServer>) {
+	for (expr, mut image) in objects.iter_mut() {
+		*image = ObjectData::gen_texture(&expr, &asset_server);
+	}
+}
+// System for updating blocks based on external state
+pub fn hover_update(
+	mut objects: Query<
+		(Entity, &mut Sprite),
+		Without<Placing>,
+	>,
+	state: ResMut<GameState>,
+) {
+	for (entity, mut sprite) in objects.iter_mut() {
+		sprite.color = ObjectData::gen_color(state.top_hovering == Some(entity));
+	}
 }
