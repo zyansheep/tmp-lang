@@ -12,11 +12,12 @@ pub enum Side {
 }
 #[derive(Component, Debug, PartialEq)]
 pub enum HoverState {
-	Yes { order: f32, side: Side, top: bool },
+	Yes { order: f32, side: Side, top: bool, bottom: bool },
 	No,
 }
 impl HoverState {
 	pub fn is_top(&self) -> bool { if let Self::Yes { top: true, .. } = self { true } else { false } }
+	pub fn is_bottom(&self) -> bool { if let Self::Yes { bottom: true, .. } = self { true } else { false } }
 }
 
 // Mark objects as currently being hovered over.
@@ -30,6 +31,7 @@ pub fn mouseover_system(
 ) {
 	if let Ok(mouse) = mouse.get_single() {
 		let (mut top_order, mut top_entity) = (f32::MAX, None::<Entity>);
+		let (mut bottom_order, mut bottom_entity) = (f32::MAX, None::<Entity>);
 
 		for (entity, data, transform, mut hover_state) in objects.p0().iter_mut() {
 			let loc = transform.translation;
@@ -54,11 +56,15 @@ pub fn mouseover_system(
 				};
 				// Order Hovered objects by their size, smallest hovered object should be the one highlighted
 				let order = data.size;
-				*hover_state = HoverState::Yes { order, side, top: false };
+				*hover_state = HoverState::Yes { order, side, top: false, bottom: false };
 				if order <= top_order {
 					top_order = order;
 					top_entity = Some(entity);
 					// info!("{}")
+				}
+				if order >= bottom_order {
+					bottom_order = order;
+					bottom_entity = Some(entity);
 				}
 				
 			} else {
@@ -70,7 +76,11 @@ pub fn mouseover_system(
 				if let HoverState::Yes { top, .. } = &mut *hover_state {
 					*top = true;
 				}
-				break
+			}
+			if Some(entity) == bottom_entity {
+				if let HoverState::Yes { bottom, .. } = &mut *hover_state {
+					*bottom = true;
+				}
 			}
 		}
 		
