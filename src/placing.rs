@@ -98,7 +98,7 @@ pub fn placing_system(
 					*expr_slot = Some(entity);
 					data.parent = Some(h_entity);
 					// commands.entity(h_entity).add_child(entity); // DONT DO THIS, YOUR LIFE WILL BE PAINNNN
-					commands.entity(entity).remove::<Placing>();
+					commands.entity(entity).remove::<Placing>().insert(HoverState::No);
 					app_state.set(AppState::Default).unwrap();
 					return;
 				}
@@ -108,7 +108,7 @@ pub fn placing_system(
 	}
 	// Place block on blank canvas (if there are no objects in scene)
 	if mouse.just_pressed(MouseButton::Left) && other_objects.is_empty() {
-		commands.entity(entity).remove::<Placing>();
+		commands.entity(entity).remove::<Placing>().insert(HoverState::No);
 		app_state.set(AppState::Default).unwrap();
 	}
 	

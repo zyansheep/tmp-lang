@@ -22,12 +22,16 @@ impl HoverState {
 // Mark objects as currently being hovered over.
 pub fn mouseover_system(
 	mouse: Query<&MousePosWorld, (Changed<MousePosWorld>, With<MainCamera>)>,
-	mut objects: Query<(Entity, &ObjectData, &GlobalTransform, &mut HoverState), Without<Placing>>,
+	mut objects: ParamSet<(
+		Query<(Entity, &ObjectData, &GlobalTransform, &mut HoverState)>,
+		Query<(Entity, &mut HoverState)>,
+	)>,
+	// mut objects_2: Query<(Entity, &ObjectData, &GlobalTransform, &mut HoverState), Without<Placing>>,
 ) {
-	let (mut top_order, mut top_entity) = (f32::MAX, None::<Entity>);
 	if let Ok(mouse) = mouse.get_single() {
-		// info!("Mouse Coords: {}", mouse);
-		for (entity, data, transform, mut hover_state) in objects.iter_mut() {
+		let (mut top_order, mut top_entity) = (f32::MAX, None::<Entity>);
+
+		for (entity, data, transform, mut hover_state) in objects.p0().iter_mut() {
 			let loc = transform.translation;
 			let size = data.size();
 
@@ -50,21 +54,20 @@ pub fn mouseover_system(
 				};
 				// Order Hovered objects by their size, smallest hovered object should be the one highlighted
 				let order = data.size;
+				*hover_state = HoverState::Yes { order, side, top: false };
 				if order <= top_order {
 					top_order = order;
 					top_entity = Some(entity);
+					// info!("{}")
 				}
-				*hover_state = HoverState::Yes { order, side, top: false };
 				
 			} else {
 				*hover_state = HoverState::No;
 			}
 		}
-		info!("round");
-		for (entity, _, _, mut state) in objects.iter_mut() {
-			info!("{entity:?}: {:?}", state);
+		for (entity, mut hover_state) in objects.p1().iter_mut() {
 			if Some(entity) == top_entity {
-				if let HoverState::Yes { top, .. } = &mut *state {
+				if let HoverState::Yes { top, .. } = &mut *hover_state {
 					*top = true;
 				}
 				break
