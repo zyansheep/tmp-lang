@@ -266,12 +266,13 @@ fn exprs_forming_system(
 
 				match &mut *wexpr {
 					WrappedExpr::Lambda {
-						bind_entity: Some(bind_entity),
+						bind_entity,
 						expr_entity: Some(expr_entity),
 						formed,
 					} if *expr_entity == f_entity => {
-						debug!("test1");
-						let bind = f_bind_tree.pop_binding(&LeakStore, bind_entity, &LeakStore).unwrap();
+						let bind = if let Some(bind_entity) = bind_entity {
+							f_bind_tree.pop_binding(&LeakStore, bind_entity, &LeakStore).unwrap()
+						} else { Binding::NONE };
 						*formed = Some((LeakStore.add(Expr::Lambda { bind, expr: f_expr }), f_bind_tree));
 						commands.entity(entity).insert(Formed);
 						info!("Entity {:?} formed expression: {:?}", entity, *formed);
@@ -281,9 +282,7 @@ fn exprs_forming_system(
 						args_entity: _,
 						partial_form,
 						formed: None,
-					} => if partial_form.is_none() && *func_entity == f_entity {
-						debug!("test2");
-
+					} if partial_form.is_none() && *func_entity == f_entity => {
 						*partial_form = Some((f_expr, f_bind_tree, PartialForm::Func));
 						info!("Entity {:?} formed partial expression for: {:?}", entity, PartialForm::Func);
 					}
@@ -292,8 +291,7 @@ fn exprs_forming_system(
 						args_entity: Some(args_entity),
 						partial_form,
 						formed: None,
-					} => if partial_form.is_none() && *args_entity == f_entity {
-						debug!("test3");
+					} if partial_form.is_none() && *args_entity == f_entity => {
 						*partial_form = Some((f_expr, f_bind_tree, PartialForm::Args));
 						info!("Entity {:?} formed partial expression for: {:?}", entity, PartialForm::Args);
 					}
@@ -304,7 +302,6 @@ fn exprs_forming_system(
 						formed,
 					} => match partial_form {
 						PartialForm::Func if *args_entity == f_entity => {
-							debug!("test4");
 							*formed = Some((
 								Expr::app(*partial_expr, f_expr, &LeakStore),
 								BindEntityTree::branch(*partial_tree, f_bind_tree, &LeakStore)
@@ -313,7 +310,6 @@ fn exprs_forming_system(
 							info!("Entity {:?} formed expression: {:?}", entity, *formed);
 						}
 						PartialForm::Args if *func_entity == f_entity => {
-							debug!("test5");
 							*formed = Some((
 								Expr::app(f_expr, *partial_expr, &LeakStore),
 								BindEntityTree::branch(f_bind_tree, *partial_tree, &LeakStore)
@@ -321,9 +317,9 @@ fn exprs_forming_system(
 							commands.entity(entity).insert(Formed);
 							info!("Entity {:?} formed expression: {:?}", entity, *formed);
 						}
-						_ => { debug!("test6"); warn!("Entity {:?} Couldn't form partial form with expression {:?}", entity, *wexpr); }
+						_ => { warn!("Entity {:?} Couldn't form partial form with expression {:?}", entity, *wexpr); }
 					}
-					_ => { debug!("test7"); warn!("Entity {:?} couldn't form expression: {:?}", entity, *wexpr); }
+					_ => { warn!("Entity {:?} couldn't form expression: {:?}", entity, *wexpr); }
 				}
 				debug!("Finished Testing {:?} expr: {:?} against formed expression {:?}: {:?}", entity, *wexpr, f_entity, *f_wexpr);
 			}
