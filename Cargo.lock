@@ -534,6 +534,7 @@ dependencies = [
 [[package]]
 name = "bevy_mouse_tracking_plugin"
 version = "0.2.1"
+source = "git+https://github.com/zyansheep/bevy-mouse-tracking#7b358c66feffc38b44d0d1b2d479057914888b04"
 dependencies = [
  "bevy",
 ]
@@ -541,6 +542,7 @@ dependencies = [
 [[package]]
 name = "bevy_pancam"
 version = "0.3.0"
+source = "git+https://github.com/zyansheep/bevy_pancam#e3e3f3e0824f21a6a38c6f59df74c635fcab3867"
 dependencies = [
  "bevy",
 ]

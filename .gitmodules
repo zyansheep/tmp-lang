@@ -1,6 +1,0 @@
-[submodule "vendor/bevy-mouse-tracking"]
-	path = vendor/bevy-mouse-tracking
-	url = https://github.com/JoJoJet/bevy-mouse-tracking
-[submodule "vendor/bevy_pancam"]
-	path = vendor/bevy_pancam
-	url = https://github.com/johanhelsing/bevy_pancam
