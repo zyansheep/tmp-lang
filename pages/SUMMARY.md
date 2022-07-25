@@ -1,3 +1,5 @@
 # Summary
 
-- [Chapter 1](./chapter_1.md)
+- [Introduction](./introduction.md)
+- [Build instructions](./build_instruction.md)
+- [How 2 use](./how_to_use.md)
