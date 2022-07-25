@@ -18,21 +18,30 @@ pub enum PartialForm {
 pub enum WrappedExpr {
 	Variable { formed: (&'static Expr<'static>, &'static BindEntityTree) },
 	Lambda {
-		bind_entity: Option<Entity>,
 		expr_entity: Option<Entity>,
+		is_bound: bool,
 		formed: Option<(&'static Expr<'static>, &'static BindEntityTree)>,
 	},
 	Application {
 		func_entity: Option<Entity>,
 		args_entity: Option<Entity>,
-		partial_form: Option<(&'static Expr<'static>, &'static BindEntityTree, PartialForm)>,
+		partial_formed: Option<(&'static Expr<'static>, &'static BindEntityTree, PartialForm)>,
 		formed: Option<(&'static Expr<'static>, &'static BindEntityTree)>,
 	}
 }
 impl WrappedExpr {
-	pub const APPLICATION: WrappedExpr = WrappedExpr::Application { func_entity: None, args_entity: None, partial_form: None, formed: None };
-	pub const LAMBDA: WrappedExpr = WrappedExpr::Lambda { bind_entity: None, expr_entity: None, formed: None };
+	pub const APPLICATION: WrappedExpr = WrappedExpr::Application { func_entity: None, args_entity: None, partial_formed: None, formed: None };
+	pub const LAMBDA: WrappedExpr = WrappedExpr::Lambda { is_bound: false, expr_entity: None, formed: None };
 	pub const VARIABLE: WrappedExpr = WrappedExpr::Variable { formed: (Expr::VAR, BindTree::NONE) };
+	pub fn unform(&mut self) {
+		match self {
+			Self::Application { formed, partial_formed, .. } => {
+				*formed = None; *partial_formed = None;
+			}
+			Self::Lambda { formed, .. } => *formed = None,
+			_ => {},
+		}
+	}
 }
 impl Default for WrappedExpr { fn default() -> Self { Self::VARIABLE } }
 
@@ -77,9 +86,9 @@ impl ObjectData {
 		match expr {
 			WrappedExpr::Variable { formed: (_, BindEntityTree::End(_)) } => 				asset_server.load("VarState=Connected.png"),
 			WrappedExpr::Variable { .. } => 												asset_server.load("VarState=Placed.png"),
-			WrappedExpr::Lambda { formed: Some(_), bind_entity: Some(_), .. } => 			asset_server.load("LamState=FormedConnected.png"),
+			WrappedExpr::Lambda { formed: Some(_), is_bound: true, .. } => 			asset_server.load("LamState=FormedConnected.png"),
 			WrappedExpr::Lambda { formed: Some(_), .. } => 									asset_server.load("LamState=Formed.png"),
-			WrappedExpr::Lambda { expr_entity: Some(_), bind_entity: Some(_), .. } => 		asset_server.load("LamState=Connected.png"),
+			WrappedExpr::Lambda { expr_entity: Some(_), is_bound: true, .. } => 		asset_server.load("LamState=Connected.png"),
 			WrappedExpr::Lambda { expr_entity: Some(_), .. } => 							asset_server.load("LamState=Placed.png"),
 			WrappedExpr::Lambda { expr_entity: None, .. } => 								asset_server.load("LamState=None.png"),
 			WrappedExpr::Application { formed: Some(_), .. } => 							asset_server.load("AppState=Formed.png"),

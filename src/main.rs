@@ -188,13 +188,13 @@ fn connecting_system(
 	for (entity, data, mut expr, conn) in objects.iter_mut() {
 		match (&mut *expr, conn.1) {
 			(WrappedExpr::Variable { formed: (_, bind_tree) }, PortType::Variable) => {
-				*bind_tree = BindTree::end(entity, &LeakStore);
+				*bind_tree = BindTree::end(conn.0, &LeakStore);
 				commands.entity(entity).insert(TriggerReform);
 				debug!("Set bind {entity:?} : {:?} to {:?}", *expr, conn.0);
 			},
-			(WrappedExpr::Lambda { bind_entity, .. }, PortType::Lambda) => {
+			(WrappedExpr::Lambda { is_bound, .. }, PortType::Lambda) => {
+				*is_bound = true;
 				commands.entity(entity).insert(TriggerReform);
-				*bind_entity = Some(conn.0);
 				debug!("Set bind {entity:?} : {:?} to {:?}", *expr, conn.0);
 			},
 			_ => { error!("Invalid connection") }
@@ -202,10 +202,12 @@ fn connecting_system(
 		commands.entity(entity).remove::<FormConnection>();
 	}
 }
-fn reform_system(mut commands: Commands, objects: Query<(Entity, &ObjectData, &WrappedExpr), Added<TriggerReform>>) {
-	for (entity, data, expr) in objects.iter() {
+fn reform_system(mut commands: Commands, mut objects: Query<(Entity, &ObjectData, &mut WrappedExpr), Added<TriggerReform>>) {
+	for (entity, data, mut expr) in objects.iter_mut() {
+		debug!("Unformed: {:?}", entity);
+		expr.unform(); // Remove formed fields
 		commands.entity(entity).remove::<TriggerReform>().remove::<Formed>();
-		if let WrappedExpr::Variable { .. } = expr { commands.entity(entity).insert(Formed); }
+		if let WrappedExpr::Variable { .. } = *expr { commands.entity(entity).insert(Formed); }
 		if let Some(parent) = data.parent {
 			commands.entity(parent).insert(TriggerReform).remove::<Formed>();
 		}
@@ -276,23 +278,20 @@ struct Formed;
 
 fn exprs_forming_system(
 	mut commands: Commands,
-	formed: Query<(Entity, &mut WrappedExpr), (Or<(Changed<WrappedExpr>, Added<Formed>)>, With<HoverState>, With<Formed>)>,
+	formed: Query<(Entity, &ObjectData, &mut WrappedExpr), (With<HoverState>, With<Formed>)>,
 	mut unformed: Query<(Entity, &mut WrappedExpr), Without<Formed>>,
 ) {
-	for (f_entity, f_wexpr) in formed.iter() {
+	for (f_entity, data, f_wexpr) in formed.iter() {
 		if let WrappedExpr::Variable { formed: (f_expr, mut f_bind_tree) }
 		| WrappedExpr::Lambda { formed: Some((f_expr, mut f_bind_tree)), .. }
 		| WrappedExpr::Application { formed: Some((f_expr, mut f_bind_tree)), .. } = *f_wexpr {
-			for (entity, mut wexpr) in unformed.iter_mut () {
+			if let Some(Ok((entity, mut wexpr))) = data.parent.map(|parent|unformed.get_mut(parent)) {
 				match &mut *wexpr {
 					WrappedExpr::Lambda {
-						bind_entity,
 						expr_entity: Some(expr_entity),
-						formed,
+						formed, ..
 					} if *expr_entity == f_entity => {
-						let bind = if let Some(bind_entity) = bind_entity {
-							f_bind_tree.pop_binding(&LeakStore, bind_entity, &LeakStore).unwrap()
-						} else { Binding::NONE };
+						let bind = f_bind_tree.pop_binding(&LeakStore, &entity, &LeakStore).unwrap();
 						debug!("Using bind: {:?}", bind);
 						*formed = Some((LeakStore.add(Expr::Lambda { bind, expr: f_expr }), f_bind_tree));
 						commands.entity(entity).insert(Formed);
@@ -300,28 +299,10 @@ fn exprs_forming_system(
 					}
 					WrappedExpr::Application {
 						func_entity: Some(func_entity),
-						args_entity: _,
-						partial_form,
-						formed: None,
-					} if partial_form.is_none() && *func_entity == f_entity => {
-						*partial_form = Some((f_expr, f_bind_tree, PartialForm::Func));
-						info!("Entity {:?} formed partial expression for: {:?}", entity, PartialForm::Func);
-					}
-					WrappedExpr::Application {
-						func_entity: _,
 						args_entity: Some(args_entity),
-						partial_form,
-						formed: None,
-					} if partial_form.is_none() && *args_entity == f_entity => {
-						*partial_form = Some((f_expr, f_bind_tree, PartialForm::Args));
-						info!("Entity {:?} formed partial expression for: {:?}", entity, PartialForm::Args);
-					}
-					WrappedExpr::Application {
-						func_entity: Some(func_entity),
-						args_entity: Some(args_entity),
-						partial_form: Some((partial_expr, partial_tree, partial_form)),
+						partial_formed: Some((partial_expr, partial_tree, partial_form)),
 						formed,
-					} => match partial_form {
+					} if formed.is_none() => match partial_form {
 						PartialForm::Func if *args_entity == f_entity => {
 							*formed = Some((
 								Expr::app(*partial_expr, f_expr, &LeakStore),
@@ -340,39 +321,34 @@ fn exprs_forming_system(
 						}
 						_ => { warn!("Entity {:?} Couldn't form partial form with expression {:?}", entity, *wexpr); }
 					}
+					WrappedExpr::Application {
+						func_entity: Some(func_entity),
+						args_entity: _,
+						partial_formed,
+						formed: None,
+					} if partial_formed.is_none() && *func_entity == f_entity => {
+						*partial_formed = Some((f_expr, f_bind_tree, PartialForm::Func));
+						info!("Entity {:?} formed partial expression for: {:?}", entity, PartialForm::Func);
+					}
+					WrappedExpr::Application {
+						func_entity: _,
+						args_entity: Some(args_entity),
+						partial_formed,
+						formed: None,
+					} if partial_formed.is_none() && *args_entity == f_entity => {
+						*partial_formed = Some((f_expr, f_bind_tree, PartialForm::Args));
+						info!("Entity {:?} formed partial expression for: {:?}", entity, PartialForm::Args);
+					}
 					WrappedExpr::Variable { .. } => {
 						commands.entity(entity).insert(Formed);
 						warn!("Variable not set to Formed for some reason");
 					}
 					_ => { warn!("Entity {:?} couldn't form expression: {:?}", entity, *wexpr); }
 				}
-				debug!("Finished Testing {:?} expr: {:?} against formed expression {:?}: {:?}", entity, *wexpr, f_entity, *f_wexpr);
 			}
 		} else {
 			warn!("Entity {f_entity:?} did not have formed field but had Formed component");
 			commands.entity(f_entity).remove::<Formed>();
 		}
 	}
-	// Search for formed expressions among `WrappedExpr`s that have just been updated
-	/* let mut formed_exprs: Vec<(Entity, &'static Expr, &'static BindEntityTree)> = Vec::new();
-	for (entity, w_expr) in paramset.p0().iter() {
-		match w_expr {
-			WrappedExpr::Variable { bound } => {
-				let tree = if let Some(bound) = bound { BindEntityTree::end(*bound, &LeakStore) } else { BindTree::NONE };
-				formed_exprs.push((entity, Expr::VAR, tree));
-			}
-			WrappedExpr::Lambda { formed: Some(expr), bind_tree: Some(tree), .. } | 
-			WrappedExpr::Application { formed: Some(expr), bind_tree: Some(tree), .. } => {
-				formed_exprs.push((entity, expr, tree));
-			}
-			_ => {}
-		}
-	} */
-	/* if formed_exprs.is_empty() { return } else { info!("Found formed expressions: {:?}", formed_exprs); }
-	for (entity, mut w_expr) in paramset.p1().iter_mut() {
-		// Check against all entities if existing entities have a sub-expr that is formed.
-		for (f_entity, f_expr, mut f_bind_tree) in formed_exprs.iter_mut() {
-			
-		}
-	} */
 }
