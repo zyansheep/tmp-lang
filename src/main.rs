@@ -43,14 +43,15 @@ fn main() {
 
 		.add_system_set(SystemSet::on_update(AppState::PlacingObject).with_system(placing::placing_system))
 
-		.add_system_set(SystemSet::on_update(AppState::WiringObject).with_system(wiring_system).with_system(connecting_system))
+		.add_system_set(SystemSet::on_update(AppState::WiringObject).with_system(wiring_system))
+		.add_system_set(SystemSet::on_exit(AppState::WiringObject).with_system(connecting_system))
 
 		.add_system(block::data_update).add_system(block::expr_update).add_system(block::hover_update)
 		.add_system(mouseover::mouseover_system)
 		.add_system(state_change_detect)
 		.add_system(ui::button_system)
     	.add_system(bevy::window::exit_on_window_close_system)
-		.add_system(exprs_forming_system)
+		.add_system(exprs_forming_system).add_system(reform_system)
 		.init_resource::<GameState>()
 		.run();
 }
@@ -177,17 +178,37 @@ struct ActiveWire;
 #[derive(Component, Debug, Clone)]
 struct FormConnection(Entity, PortType);
 
+#[derive(Component, Debug, Clone)]
+struct TriggerReform;
+
 fn connecting_system(
 	mut commands: Commands,
-	mut objects: Query<(Entity, &mut ObjectData, &mut WrappedExpr, &FormConnection)>
+	mut objects: Query<(Entity, &mut ObjectData, &mut WrappedExpr, &FormConnection), Added<FormConnection>>
 ) {
 	for (entity, data, mut expr, conn) in objects.iter_mut() {
 		match (&mut *expr, conn.1) {
-			(WrappedExpr::Variable { formed: (_, bind_tree) }, PortType::Variable) => *bind_tree = BindTree::end(conn.0, &LeakStore),
-			(WrappedExpr::Lambda { bind_entity, .. }, PortType::Lambda) => *bind_entity = Some(conn.0),
+			(WrappedExpr::Variable { formed: (_, bind_tree) }, PortType::Variable) => {
+				*bind_tree = BindTree::end(entity, &LeakStore);
+				commands.entity(entity).insert(TriggerReform);
+				debug!("Set bind {entity:?} : {:?} to {:?}", *expr, conn.0);
+			},
+			(WrappedExpr::Lambda { bind_entity, .. }, PortType::Lambda) => {
+				commands.entity(entity).insert(TriggerReform);
+				*bind_entity = Some(conn.0);
+				debug!("Set bind {entity:?} : {:?} to {:?}", *expr, conn.0);
+			},
 			_ => { error!("Invalid connection") }
 		}
 		commands.entity(entity).remove::<FormConnection>();
+	}
+}
+fn reform_system(mut commands: Commands, objects: Query<(Entity, &ObjectData, &WrappedExpr), Added<TriggerReform>>) {
+	for (entity, data, expr) in objects.iter() {
+		commands.entity(entity).remove::<TriggerReform>().remove::<Formed>();
+		if let WrappedExpr::Variable { .. } = expr { commands.entity(entity).insert(Formed); }
+		if let Some(parent) = data.parent {
+			commands.entity(parent).insert(TriggerReform).remove::<Formed>();
+		}
 	}
 }
 
@@ -215,6 +236,7 @@ fn wiring_system(
 						wire.end = data.location;
 						app_state.pop().unwrap();
 						commands.entity(wire_entity).remove::<ActiveWire>();
+						debug!("Wired {:?} to {:?}:({expr:?})", wire.from, entity)
 					}
 					_ => {},
 				}
@@ -260,10 +282,8 @@ fn exprs_forming_system(
 	for (f_entity, f_wexpr) in formed.iter() {
 		if let WrappedExpr::Variable { formed: (f_expr, mut f_bind_tree) }
 		| WrappedExpr::Lambda { formed: Some((f_expr, mut f_bind_tree)), .. }
-		| WrappedExpr::Application { formed: Some((f_expr, mut f_bind_tree)), .. } = f_wexpr {
+		| WrappedExpr::Application { formed: Some((f_expr, mut f_bind_tree)), .. } = *f_wexpr {
 			for (entity, mut wexpr) in unformed.iter_mut () {
-				debug!("Start Testing {:?} expr: {:?} against formed expression {:?}: {:?}", entity, *wexpr, f_entity, *f_wexpr);
-
 				match &mut *wexpr {
 					WrappedExpr::Lambda {
 						bind_entity,
@@ -273,6 +293,7 @@ fn exprs_forming_system(
 						let bind = if let Some(bind_entity) = bind_entity {
 							f_bind_tree.pop_binding(&LeakStore, bind_entity, &LeakStore).unwrap()
 						} else { Binding::NONE };
+						debug!("Using bind: {:?}", bind);
 						*formed = Some((LeakStore.add(Expr::Lambda { bind, expr: f_expr }), f_bind_tree));
 						commands.entity(entity).insert(Formed);
 						info!("Entity {:?} formed expression: {:?}", entity, *formed);
@@ -319,10 +340,17 @@ fn exprs_forming_system(
 						}
 						_ => { warn!("Entity {:?} Couldn't form partial form with expression {:?}", entity, *wexpr); }
 					}
+					WrappedExpr::Variable { .. } => {
+						commands.entity(entity).insert(Formed);
+						warn!("Variable not set to Formed for some reason");
+					}
 					_ => { warn!("Entity {:?} couldn't form expression: {:?}", entity, *wexpr); }
 				}
 				debug!("Finished Testing {:?} expr: {:?} against formed expression {:?}: {:?}", entity, *wexpr, f_entity, *f_wexpr);
 			}
+		} else {
+			warn!("Entity {f_entity:?} did not have formed field but had Formed component");
+			commands.entity(f_entity).remove::<Formed>();
 		}
 	}
 	// Search for formed expressions among `WrappedExpr`s that have just been updated

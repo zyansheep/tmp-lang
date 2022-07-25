@@ -16,7 +16,7 @@ pub enum PartialForm {
 
 #[derive(Component, Clone, Debug)]
 pub enum WrappedExpr {
-	Variable { formed: (&'static Expr<'static>, &'static BindEntityTree), },
+	Variable { formed: (&'static Expr<'static>, &'static BindEntityTree) },
 	Lambda {
 		bind_entity: Option<Entity>,
 		expr_entity: Option<Entity>,
