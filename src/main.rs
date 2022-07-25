@@ -3,10 +3,10 @@ use bevy::prelude::*;
 use bevy_mouse_tracking_plugin::{MainCamera, MousePosPlugin, MousePosWorld};
 use bevy_pancam::{PanCam, PanCamPlugin};
 use bevy_prototype_lyon::prelude::*;
-use block::{ObjectData, Orientation, WrappedExpr};
+use block::{BindEntityTree, ObjectData, Orientation, PartialForm, WrappedExpr};
 use block_to_expr::block_to_expr;
-use expr::{Binding, Expr};
-use hashdb::LinkArena;
+use expr::{Binding, Expr, BindTree};
+use hashdb::{LinkArena, TypeStore};
 use mouseover::{BottomHover, HoverState, TopHover};
 use placing::place_expr;
 
@@ -153,13 +153,6 @@ fn block_input(
 	}
 }
 
-
-// Component that travels from Variable to Lambda and once it gets there, it changes the state.
-#[derive(Component)]
-struct WireFinder {
-	bind: Binding<'static>,
-}
-
 #[derive(Debug, Clone, Copy)]
 enum PortType {
 	Lambda,
@@ -190,7 +183,7 @@ fn connecting_system(
 ) {
 	for (entity, data, mut expr, conn) in objects.iter_mut() {
 		match (&mut *expr, conn.1) {
-			(WrappedExpr::Variable { bound }, PortType::Variable) => *bound = Some(conn.0),
+			(WrappedExpr::Variable { formed: (_, bind_tree) }, PortType::Variable) => *bind_tree = BindTree::end(conn.0, &LeakStore),
 			(WrappedExpr::Lambda { bind_entity, .. }, PortType::Lambda) => *bind_entity = Some(conn.0),
 			_ => { error!("Invalid connection") }
 		}
@@ -202,8 +195,8 @@ fn connecting_system(
 fn wiring_system(
 	mut commands: Commands,
 	mut app_state: ResMut<State<AppState>>,
-	mut state: ResMut<GameState>,
-	mut top_hover: Query<(Entity, &ObjectData, &WrappedExpr, &HoverState), With<TopHover>>,
+	// mut state: ResMut<GameState>,
+	mut top_hover: Query<(Entity, &ObjectData, &WrappedExpr), With<TopHover>>,
 	mut mouse: ResMut<Input<MouseButton>>,
 	mut keyboard: ResMut<Input<KeyCode>>,
 	mut wire: Query<(Entity, &mut Wire, Option<&mut Path>), With<ActiveWire>>,
@@ -212,7 +205,7 @@ fn wiring_system(
 	// Start wiring if there is an active wire
 	if let Ok((wire_entity, mut wire, mut path)) = wire.get_single_mut() {
 		wire.end = Vec2::new(mouse_pos.x, mouse_pos.y);
-		if let Ok((entity, data, expr, state)) = top_hover.get_single_mut() {
+		if let Ok((entity, data, expr)) = top_hover.get_single_mut() {
 			if mouse.clear_just_pressed(MouseButton::Left) {
 				match (expr, wire.port) {
 					(WrappedExpr::Variable { .. }, PortType::Lambda) |
@@ -249,37 +242,113 @@ fn wiring_system(
 	}
 }
 
+// *I like to leak it leak it, I like to leak it leak it, I like to leak it leak it, I like to, LEAK IT*
+struct LeakStore;
+impl TypeStore<'static> for LeakStore {
+    fn add<T: hashdb::TypeStorable>(&self, val: T) -> &'static T {
+        Box::leak(Box::new(val))
+    }
+}
+#[derive(Component)]
+struct Formed;
+
 fn exprs_forming_system(
-	mut paramset: ParamSet<(Query<(&ObjectData, &mut WrappedExpr, Entity)>, Query<(&ObjectData, &mut WrappedExpr, Entity)>)>
+	mut commands: Commands,
+	formed: Query<(Entity, &mut WrappedExpr), (Or<(Changed<WrappedExpr>, Added<Formed>)>, With<HoverState>, With<Formed>)>,
+	mut unformed: Query<(Entity, &mut WrappedExpr), Without<Formed>>,
 ) {
-	let mut exprs: Vec<(Expr, Entity)> = Vec::new();
-	for (data, w_expr, entity) in paramset.p0().iter() {
-		match w_expr {
-			WrappedExpr::Variable { bound: Some(_) } => {
-				exprs.push((Expr::Variable, entity));
+	for (f_entity, f_wexpr) in formed.iter() {
+		if let WrappedExpr::Variable { formed: (f_expr, mut f_bind_tree) }
+		| WrappedExpr::Lambda { formed: Some((f_expr, mut f_bind_tree)), .. }
+		| WrappedExpr::Application { formed: Some((f_expr, mut f_bind_tree)), .. } = f_wexpr {
+			for (entity, mut wexpr) in unformed.iter_mut () {
+				debug!("Start Testing {:?} expr: {:?} against formed expression {:?}: {:?}", entity, *wexpr, f_entity, *f_wexpr);
+
+				match &mut *wexpr {
+					WrappedExpr::Lambda {
+						bind_entity: Some(bind_entity),
+						expr_entity: Some(expr_entity),
+						formed,
+					} if *expr_entity == f_entity => {
+						debug!("test1");
+						let bind = f_bind_tree.pop_binding(&LeakStore, bind_entity, &LeakStore).unwrap();
+						*formed = Some((LeakStore.add(Expr::Lambda { bind, expr: f_expr }), f_bind_tree));
+						commands.entity(entity).insert(Formed);
+						info!("Entity {:?} formed expression: {:?}", entity, *formed);
+					}
+					WrappedExpr::Application {
+						func_entity: Some(func_entity),
+						args_entity: _,
+						partial_form,
+						formed: None,
+					} => if partial_form.is_none() && *func_entity == f_entity {
+						debug!("test2");
+
+						*partial_form = Some((f_expr, f_bind_tree, PartialForm::Func));
+						info!("Entity {:?} formed partial expression for: {:?}", entity, PartialForm::Func);
+					}
+					WrappedExpr::Application {
+						func_entity: _,
+						args_entity: Some(args_entity),
+						partial_form,
+						formed: None,
+					} => if partial_form.is_none() && *args_entity == f_entity {
+						debug!("test3");
+						*partial_form = Some((f_expr, f_bind_tree, PartialForm::Args));
+						info!("Entity {:?} formed partial expression for: {:?}", entity, PartialForm::Args);
+					}
+					WrappedExpr::Application {
+						func_entity: Some(func_entity),
+						args_entity: Some(args_entity),
+						partial_form: Some((partial_expr, partial_tree, partial_form)),
+						formed,
+					} => match partial_form {
+						PartialForm::Func if *args_entity == f_entity => {
+							debug!("test4");
+							*formed = Some((
+								Expr::app(*partial_expr, f_expr, &LeakStore),
+								BindEntityTree::branch(*partial_tree, f_bind_tree, &LeakStore)
+							));
+							commands.entity(entity).insert(Formed);
+							info!("Entity {:?} formed expression: {:?}", entity, *formed);
+						}
+						PartialForm::Args if *func_entity == f_entity => {
+							debug!("test5");
+							*formed = Some((
+								Expr::app(f_expr, *partial_expr, &LeakStore),
+								BindEntityTree::branch(f_bind_tree, *partial_tree, &LeakStore)
+							));
+							commands.entity(entity).insert(Formed);
+							info!("Entity {:?} formed expression: {:?}", entity, *formed);
+						}
+						_ => { debug!("test6"); warn!("Entity {:?} Couldn't form partial form with expression {:?}", entity, *wexpr); }
+					}
+					_ => { debug!("test7"); warn!("Entity {:?} couldn't form expression: {:?}", entity, *wexpr); }
+				}
+				debug!("Finished Testing {:?} expr: {:?} against formed expression {:?}: {:?}", entity, *wexpr, f_entity, *f_wexpr);
 			}
-			WrappedExpr::Application {formed: Some(expr), ..} 
-			| WrappedExpr::Lambda {formed: Some(expr), ..} => {
-				exprs.push((expr.clone(), entity));
+		}
+	}
+	// Search for formed expressions among `WrappedExpr`s that have just been updated
+	/* let mut formed_exprs: Vec<(Entity, &'static Expr, &'static BindEntityTree)> = Vec::new();
+	for (entity, w_expr) in paramset.p0().iter() {
+		match w_expr {
+			WrappedExpr::Variable { bound } => {
+				let tree = if let Some(bound) = bound { BindEntityTree::end(*bound, &LeakStore) } else { BindTree::NONE };
+				formed_exprs.push((entity, Expr::VAR, tree));
+			}
+			WrappedExpr::Lambda { formed: Some(expr), bind_tree: Some(tree), .. } | 
+			WrappedExpr::Application { formed: Some(expr), bind_tree: Some(tree), .. } => {
+				formed_exprs.push((entity, expr, tree));
 			}
 			_ => {}
 		}
-	}
-	for (data, mut w_expr, entity) in paramset.p1().iter_mut() {
-		let mut expr_option: Option<&Expr> = None;
-		for (e_expr, e_entity) in exprs.iter_mut() {
-			if entity == *e_entity {
-				expr_option = Some(e_expr);
-			}
+	} */
+	/* if formed_exprs.is_empty() { return } else { info!("Found formed expressions: {:?}", formed_exprs); }
+	for (entity, mut w_expr) in paramset.p1().iter_mut() {
+		// Check against all entities if existing entities have a sub-expr that is formed.
+		for (f_entity, f_expr, mut f_bind_tree) in formed_exprs.iter_mut() {
+			
 		}
-		if let Some(expr) = expr_option {
-			match  &mut (*w_expr) {
-				WrappedExpr::Application { formed, .. }
-				| WrappedExpr::Lambda { formed, .. } => {
-					*formed = Some(expr.clone());
-				}
-				_ => {}
-			}
-		}
-	}
+	} */
 }
