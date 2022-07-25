@@ -5,7 +5,7 @@ use std::f32::consts::FRAC_1_SQRT_2;
 use bevy::prelude::*;
 use bevy_mouse_tracking_plugin::{MainCamera, MousePosWorld};
 
-use crate::{AppState, GameState, block::{WrappedExpr, Object, ObjectData, Orientation}, mouseover::{HoverState, Side, TopHover}};
+use crate::{AppState, Formed, GameState, block::{WrappedExpr, Object, ObjectData, Orientation}, mouseover::{HoverState, Side, TopHover}};
 
 #[derive(Component, Default, Clone)]
 pub struct Placing;
@@ -91,7 +91,10 @@ pub fn placing_system(
 
 			// Place block inside another block
 			if mouse.clear_just_pressed(MouseButton::Left) {
-				state.just_pressed = true;
+				// Variables are formed expressions
+				if let WrappedExpr::Variable { .. } = *expr { commands.entity(entity).insert(Formed); }
+				info!("Placed: {:?} inside {:?} on {:?} side", entity, h_entity, side);
+
 				*expr_slot = Some(entity);
 				data.parent = Some(h_entity);
 				// commands.entity(h_entity).add_child(entity); // DONT DO THIS, YOUR LIFE WILL BE PAINNNN
@@ -107,6 +110,10 @@ pub fn placing_system(
 
 		// Place block on blank canvas (if there are no objects in scene)
 		if mouse.clear_just_pressed(MouseButton::Left) && top_hover.is_empty() {
+			// Variables are formed expressions
+			if let WrappedExpr::Variable { .. } = *expr { commands.entity(entity).insert(Formed); }
+			info!("Placed: {:?}", entity);
+
 			state.just_pressed = true;
 			commands.entity(entity).remove::<Placing>().insert(HoverState::No);
 			app_state.pop().unwrap();
